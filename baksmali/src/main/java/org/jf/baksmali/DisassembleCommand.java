@@ -47,6 +47,7 @@ import org.xml.sax.SAXException;
 import javax.annotation.Nonnull;
 import java.io.File;
 import java.io.IOException;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 
@@ -105,9 +106,9 @@ public class DisassembleCommand extends DexInputCommand {
     private boolean normalizeVirtualMethods = false;
 
     @Parameter(names = {"-o", "--output"},
-            description = "The directory to write the disassembled files to.")
+            description = "The directory or dex file to write the disassembled files to.")
     @ExtendedParameter(argumentNames = "dir")
-    private String outputDir = "out";
+    private String output = "out";
 
     @Parameter(names = {"--parameter-registers", "--preg", "--pr"}, arity = 1,
             description = "Use the pNN syntax for registers that refer to a method parameter on method entry. True " +
@@ -162,11 +163,21 @@ public class DisassembleCommand extends DexInputCommand {
                             "re-assemble the results unless you deodex it. See \"baksmali help deodex\"");
         }
 
-        File outputDirectoryFile = new File(outputDir);
-        if (!outputDirectoryFile.exists()) {
-            if (!outputDirectoryFile.mkdirs()) {
-                System.err.println("Can't create the output directory " + outputDir);
-                System.exit(-1);
+        File outputDirOrFile = new File(output);
+        if (!outputDirOrFile.exists()) {
+            if (outputDirOrFile.getName().endsWith(".dex")){
+                if (outputDirOrFile.getParent() != null) {
+                    File outputDexDir = new File(outputDirOrFile.getParent());
+                    if (!outputDexDir.mkdirs()) {
+                        System.err.println("Can't create the output directory " + output);
+                        System.exit(-1);
+                    }
+                }
+            } else {
+                if (!outputDirOrFile.mkdirs()) {
+                    System.err.println("Can't create the output directory " + output);
+                    System.exit(-1);
+                }
             }
         }
 
@@ -174,8 +185,20 @@ public class DisassembleCommand extends DexInputCommand {
             analysisArguments.classPathDirectories = Lists.newArrayList(inputFile.getAbsoluteFile().getParent());
         }
 
-        if (!Baksmali.disassembleDexFile(dexFile, outputDirectoryFile, jobs, getOptions(), classes)) {
-            System.exit(-1);
+        if (outputDirOrFile.exists() && outputDirOrFile.isDirectory()) {
+            if (!Baksmali.disassembleDexFile(dexFile, outputDirOrFile, jobs, getOptions(), classes)) {
+                System.exit(-1);
+            }
+        } else {
+            HashSet<byte[]> classesSet = new HashSet<>();
+            if (!Baksmali.disassembleDexFile(dexFile, classesSet, jobs, getOptions(), classes)) {
+                System.exit(-1);
+            }
+            try {
+                Baksmali.assemble(getOptions(), classesSet, jobs, outputDirOrFile);
+            } catch (IOException ex) {
+                throw new RuntimeException(ex);
+            }
         }
     }
 

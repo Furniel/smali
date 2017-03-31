@@ -41,6 +41,7 @@ buildscript {
 dependencies {
     compile project(':util')
     compile project(':dexlib2')
+    compile project(':smali')
     compile depends.guava
     compile depends.jcommander
 

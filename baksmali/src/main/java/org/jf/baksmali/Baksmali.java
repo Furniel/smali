@@ -30,17 +30,26 @@ package org.jf.baksmali;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Ordering;
+import org.antlr.runtime.CommonTokenStream;
+import org.antlr.runtime.TokenSource;
+import org.antlr.runtime.tree.CommonTree;
+import org.antlr.runtime.tree.CommonTreeNodeStream;
 import org.jf.baksmali.Adaptors.ClassDefinition;
+import org.jf.dexlib2.Opcodes;
 import org.jf.dexlib2.iface.ClassDef;
 import org.jf.dexlib2.iface.DexFile;
+import org.jf.dexlib2.writer.builder.DexBuilder;
+import org.jf.dexlib2.writer.io.FileDataStore;
+import org.jf.smali.LexerErrorInterface;
+import org.jf.smali.smaliFlexLexer;
+import org.jf.smali.smaliParser;
+import org.jf.smali.smaliTreeWalker;
 import org.jf.util.ClassFileNameHandler;
 import org.jf.util.IndentingWriter;
 
 import javax.annotation.Nullable;
 import java.io.*;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Set;
+import java.util.*;
 import java.util.concurrent.*;
 
 public class Baksmali {
@@ -67,12 +76,13 @@ public class Baksmali {
             classSet = new HashSet<String>(classes);
         }
 
-        for (final ClassDef classDef: classDefs) {
+        for (final ClassDef classDef : classDefs) {
             if (classSet != null && !classSet.contains(classDef.getType())) {
                 continue;
             }
             tasks.add(executor.submit(new Callable<Boolean>() {
-                @Override public Boolean call() throws Exception {
+                @Override
+                public Boolean call() throws Exception {
                     return disassembleClass(classDef, fileNameHandler, options);
                 }
             }));
@@ -80,8 +90,59 @@ public class Baksmali {
 
         boolean errorOccurred = false;
         try {
-            for (Future<Boolean> task: tasks) {
-                while(true) {
+            for (Future<Boolean> task : tasks) {
+                while (true) {
+                    try {
+                        if (!task.get()) {
+                            errorOccurred = true;
+                        }
+                    } catch (InterruptedException ex) {
+                        continue;
+                    } catch (ExecutionException ex) {
+                        throw new RuntimeException(ex);
+                    }
+                    break;
+                }
+            }
+        } finally {
+            executor.shutdown();
+        }
+        return !errorOccurred;
+    }
+
+    public static boolean disassembleDexFile(DexFile dexFile, HashSet<byte[]> classesSet, int jobs, final BaksmaliOptions options,
+                                             @Nullable List<String> classes) {
+
+        //sort the classes, so that if we're on a case-insensitive file system and need to handle classes with file
+        //name collisions, then we'll use the same name for each class, if the dex file goes through multiple
+        //baksmali/smali cycles for some reason. If a class with a colliding name is added or removed, the filenames
+        //may still change of course
+        List<? extends ClassDef> classDefs = Ordering.natural().sortedCopy(dexFile.getClasses());
+
+        ExecutorService executor = Executors.newFixedThreadPool(jobs);
+        List<Future<Boolean>> tasks = Lists.newArrayList();
+
+        Set<String> classSet = null;
+        if (classes != null) {
+            classSet = new HashSet<String>(classes);
+        }
+
+        for (final ClassDef classDef : classDefs) {
+            if (classSet != null && !classSet.contains(classDef.getType())) {
+                continue;
+            }
+            tasks.add(executor.submit(new Callable<Boolean>() {
+                @Override
+                public Boolean call() throws Exception {
+                    return disassembleClass(classDef, classesSet, options);
+                }
+            }));
+        }
+
+        boolean errorOccurred = false;
+        try {
+            for (Future<Boolean> task : tasks) {
+                while (true) {
                     try {
                         if (!task.get()) {
                             errorOccurred = true;
@@ -113,7 +174,7 @@ public class Baksmali {
 
         //validate that the descriptor is formatted like we expect
         if (classDescriptor.charAt(0) != 'L' ||
-                classDescriptor.charAt(classDescriptor.length()-1) != ';') {
+                classDescriptor.charAt(classDescriptor.length() - 1) != ';') {
             System.err.println("Unrecognized class descriptor - " + classDescriptor + " - skipping class");
             return false;
         }
@@ -125,8 +186,7 @@ public class Baksmali {
 
         //write the disassembly
         Writer writer = null;
-        try
-        {
+        try {
             File smaliParent = smaliFile.getParentFile();
             if (!smaliParent.exists()) {
                 if (!smaliParent.mkdirs()) {
@@ -138,7 +198,7 @@ public class Baksmali {
                 }
             }
 
-            if (!smaliFile.exists()){
+            if (!smaliFile.exists()) {
                 if (!smaliFile.createNewFile()) {
                     System.err.println("Unable to create file " + smaliFile.toString() + " - skipping class");
                     return false;
@@ -149,16 +209,15 @@ public class Baksmali {
                     new FileOutputStream(smaliFile), "UTF8"));
 
             writer = new IndentingWriter(bufWriter);
-            classDefinition.writeTo((IndentingWriter)writer);
+            classDefinition.writeTo((IndentingWriter) writer);
+
         } catch (Exception ex) {
             System.err.println("\n\nError occurred while disassembling class " + classDescriptor.replace('/', '.') + " - skipping class");
             ex.printStackTrace();
             // noinspection ResultOfMethodCallIgnored
             smaliFile.delete();
             return false;
-        }
-        finally
-        {
+        } finally {
             if (writer != null) {
                 try {
                     writer.close();
@@ -169,5 +228,147 @@ public class Baksmali {
             }
         }
         return true;
+    }
+
+    private static boolean disassembleClass(ClassDef classDef, HashSet<byte[]> classesSet,
+                                            BaksmaliOptions options) {
+        /**
+         * The path for the disassembly file is based on the package name
+         * The class descriptor will look something like:
+         * Ljava/lang/Object;
+         * Where the there is leading 'L' and a trailing ';', and the parts of the
+         * package name are separated by '/'
+         */
+        String classDescriptor = classDef.getType();
+
+        //validate that the descriptor is formatted like we expect
+        if (classDescriptor.charAt(0) != 'L' ||
+                classDescriptor.charAt(classDescriptor.length() - 1) != ';') {
+            System.err.println("Unrecognized class descriptor - " + classDescriptor + " - skipping class");
+            return false;
+        }
+        //create and initialize the top level string template
+        ClassDefinition classDefinition = new ClassDefinition(options, classDef);
+
+        //write the disassembly
+        Writer writer = null;
+        try {
+            ByteArrayOutputStream bos = new ByteArrayOutputStream();
+            OutputStreamWriter outWriter = new OutputStreamWriter(bos, "UTF8");
+            writer = new IndentingWriter(outWriter);
+            classDefinition.writeTo((IndentingWriter) writer);
+            writer.flush();
+            byte[] arr = bos.toByteArray();
+            bos.close();
+            classesSet.add(arr);
+        } catch (Exception ex) {
+            System.err.println("\n\nError occurred while disassembling class " + classDescriptor.replace('/', '.') + " - skipping class");
+            ex.printStackTrace();
+            // noinspection ResultOfMethodCallIgnored
+            return false;
+        } finally {
+            if (writer != null) {
+                try {
+                    writer.close();
+                } catch (Throwable ex) {
+                    System.err.println("\n\nError occurred while closing output ");
+                    ex.printStackTrace();
+                }
+            }
+        }
+        return true;
+    }
+
+    /**
+     * Assemble the specified files, using the given options
+     *
+     * @param options a BaksmaliOptions object with the options to run smali with
+     * @param classesSet   The byte[] to process
+     * @return true if assembly completed with no errors, or false if errors were encountered
+     */
+    public static boolean assemble(final BaksmaliOptions options, HashSet<byte[]> classesSet, int jobs, File outputFile) throws IOException {
+
+        boolean errors = false;
+
+        final DexBuilder dexBuilder = new DexBuilder(Opcodes.forApi(options.apiLevel));
+
+        ExecutorService executor = Executors.newFixedThreadPool(jobs);
+        List<Future<Boolean>> tasks = Lists.newArrayList();
+
+        for (byte[] bytes : classesSet) {
+            tasks.add(executor.submit(new Callable<Boolean>() {
+                @Override
+                public Boolean call() throws Exception {
+                    return assembleSmaliFile(bytes , dexBuilder, options);
+                }
+            }));
+        }
+
+        for (Future<Boolean> task : tasks) {
+            while (true) {
+                try {
+                    try {
+                        if (!task.get()) {
+                            errors = true;
+                        }
+                    } catch (ExecutionException ex) {
+                        throw new RuntimeException(ex);
+                    }
+                } catch (InterruptedException ex) {
+                    continue;
+                }
+                break;
+            }
+        }
+
+        executor.shutdown();
+
+        if (errors) {
+            return false;
+        }
+
+        dexBuilder.writeTo(new FileDataStore(outputFile));
+
+        return true;
+    }
+
+    private static boolean assembleSmaliFile(byte[] bytes, DexBuilder dexBuilder, BaksmaliOptions options)
+            throws Exception {
+        ByteArrayInputStream bis = null;
+        try {
+            bis = new ByteArrayInputStream(bytes);
+            InputStreamReader reader = new InputStreamReader(bis, "UTF-8");
+
+            LexerErrorInterface lexer = new smaliFlexLexer(reader);
+            //((smaliFlexLexer) lexer).setSourceFile(smaliFile);
+            CommonTokenStream tokens = new CommonTokenStream((TokenSource) lexer);
+
+
+            smaliParser parser = new smaliParser(tokens);
+            parser.setApiLevel(options.apiLevel);
+
+            smaliParser.smali_file_return result = parser.smali_file();
+
+            if (parser.getNumberOfSyntaxErrors() > 0 || lexer.getNumberOfSyntaxErrors() > 0) {
+                return false;
+            }
+
+            CommonTree t = result.getTree();
+
+            CommonTreeNodeStream treeStream = new CommonTreeNodeStream(t);
+            treeStream.setTokenStream(tokens);
+
+            smaliTreeWalker dexGen = new smaliTreeWalker(treeStream);
+            dexGen.setApiLevel(options.apiLevel);
+            dexGen.setDexBuilder(dexBuilder);
+            dexGen.smali_file();
+
+            return dexGen.getNumberOfSyntaxErrors() == 0;
+        } finally {
+            if (bis != null) {
+                bis.close();
+            }
+        }
+
     }
 }
