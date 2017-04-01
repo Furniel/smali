@@ -49,7 +49,13 @@ import org.jf.util.IndentingWriter;
 
 import javax.annotation.Nullable;
 import java.io.*;
-import java.util.*;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.*;
 
 public class Baksmali {
@@ -59,7 +65,6 @@ public class Baksmali {
 
     public static boolean disassembleDexFile(DexFile dexFile, File outputDir, int jobs, final BaksmaliOptions options,
                                              @Nullable List<String> classes) {
-
         //sort the classes, so that if we're on a case-insensitive file system and need to handle classes with file
         //name collisions, then we'll use the same name for each class, if the dex file goes through multiple
         //baksmali/smali cycles for some reason. If a class with a colliding name is added or removed, the filenames
@@ -110,7 +115,7 @@ public class Baksmali {
         return !errorOccurred;
     }
 
-    public static boolean disassembleDexFile(DexFile dexFile, HashSet<byte[]> classesSet, int jobs, final BaksmaliOptions options,
+    public static boolean disassembleDexFile(DexFile dexFile, ConcurrentHashMap<String,byte[]> classesSet, int jobs, final BaksmaliOptions options,
                                              @Nullable List<String> classes) {
 
         //sort the classes, so that if we're on a case-insensitive file system and need to handle classes with file
@@ -230,7 +235,7 @@ public class Baksmali {
         return true;
     }
 
-    private static boolean disassembleClass(ClassDef classDef, HashSet<byte[]> classesSet,
+    private static boolean disassembleClass(ClassDef classDef, ConcurrentHashMap<String,byte[]> classesSet,
                                             BaksmaliOptions options) {
         /**
          * The path for the disassembly file is based on the package name
@@ -260,7 +265,7 @@ public class Baksmali {
             writer.flush();
             byte[] arr = bos.toByteArray();
             bos.close();
-            classesSet.add(arr);
+            classesSet.put(classDescriptor,arr);
         } catch (Exception ex) {
             System.err.println("\n\nError occurred while disassembling class " + classDescriptor.replace('/', '.') + " - skipping class");
             ex.printStackTrace();
@@ -286,7 +291,29 @@ public class Baksmali {
      * @param classesSet   The byte[] to process
      * @return true if assembly completed with no errors, or false if errors were encountered
      */
-    public static boolean assemble(final BaksmaliOptions options, HashSet<byte[]> classesSet, int jobs, File outputFile) throws IOException {
+    public static boolean assemble(final BaksmaliOptions options, ConcurrentHashMap<String,byte[]> classesSet, int jobs, Path outputFile) throws IOException {
+        File tmp = File.createTempFile("smali",".dex");
+        if (!Baksmali.assemble(options, classesSet, jobs, tmp)) {
+            if (tmp.exists()){
+                tmp.delete();
+            }
+            return false;
+        }
+        Files.copy(tmp.toPath(), outputFile, StandardCopyOption.REPLACE_EXISTING);
+        if (tmp.exists()){
+            tmp.delete();
+        }
+        return true;
+    }
+
+    /**
+     * Assemble the specified files, using the given options
+     *
+     * @param options a BaksmaliOptions object with the options to run smali with
+     * @param classesSet   The byte[] to process
+     * @return true if assembly completed with no errors, or false if errors were encountered
+     */
+    public static boolean assemble(final BaksmaliOptions options, ConcurrentHashMap<String,byte[]> classesSet, int jobs, File outputFile) throws IOException {
 
         boolean errors = false;
 
@@ -295,11 +322,11 @@ public class Baksmali {
         ExecutorService executor = Executors.newFixedThreadPool(jobs);
         List<Future<Boolean>> tasks = Lists.newArrayList();
 
-        for (byte[] bytes : classesSet) {
+        for (Map.Entry<String, byte[]> entry : classesSet.entrySet()) {
             tasks.add(executor.submit(new Callable<Boolean>() {
                 @Override
                 public Boolean call() throws Exception {
-                    return assembleSmaliFile(bytes , dexBuilder, options);
+                    return assembleSmaliFile(entry.getKey(), entry.getValue() , dexBuilder, options);
                 }
             }));
         }
@@ -332,7 +359,7 @@ public class Baksmali {
         return true;
     }
 
-    private static boolean assembleSmaliFile(byte[] bytes, DexBuilder dexBuilder, BaksmaliOptions options)
+    private static boolean assembleSmaliFile(String name, byte[] bytes, DexBuilder dexBuilder, BaksmaliOptions options)
             throws Exception {
         ByteArrayInputStream bis = null;
         try {
@@ -340,7 +367,8 @@ public class Baksmali {
             InputStreamReader reader = new InputStreamReader(bis, "UTF-8");
 
             LexerErrorInterface lexer = new smaliFlexLexer(reader);
-            //((smaliFlexLexer) lexer).setSourceFile(smaliFile);
+            File tmpSmaliFile= new File(name);
+            ((smaliFlexLexer)lexer).setSourceFile(tmpSmaliFile);
             CommonTokenStream tokens = new CommonTokenStream((TokenSource) lexer);
 
 

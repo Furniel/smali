@@ -47,9 +47,14 @@ import org.xml.sax.SAXException;
 import javax.annotation.Nonnull;
 import java.io.File;
 import java.io.IOException;
-import java.util.HashSet;
+import java.net.URI;
+import java.nio.file.FileSystem;
+import java.nio.file.FileSystems;
+import java.nio.file.Path;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 @Parameters(commandDescription = "Disassembles a dex file.")
 @ExtendedParameters(
@@ -166,9 +171,9 @@ public class DisassembleCommand extends DexInputCommand {
         File outputDirOrFile = new File(output);
         if (!outputDirOrFile.exists()) {
             if (outputDirOrFile.getName().endsWith(".dex")){
-                if (outputDirOrFile.getParent() != null) {
-                    File outputDexDir = new File(outputDirOrFile.getParent());
-                    if (!outputDexDir.mkdirs()) {
+                if (outputDirOrFile.getParentFile() != null && !outputDirOrFile.getParentFile().getName().endsWith(".apk") &&
+                        !outputDirOrFile.getParentFile().getName().endsWith(".jar")) {
+                    if (!outputDirOrFile.getParentFile().mkdirs()) {
                         System.err.println("Can't create the output directory " + output);
                         System.exit(-1);
                     }
@@ -190,15 +195,63 @@ public class DisassembleCommand extends DexInputCommand {
                 System.exit(-1);
             }
         } else {
-            HashSet<byte[]> classesSet = new HashSet<>();
-            if (!Baksmali.disassembleDexFile(dexFile, classesSet, jobs, getOptions(), classes)) {
-                System.exit(-1);
+            FileSystem zipfs = null;
+            Path outputZip = null;
+            if ((outputDirOrFile.getParentFile() != null && (outputDirOrFile.getParentFile().getName().endsWith(".apk") ||
+                    outputDirOrFile.getParentFile().getName().endsWith(".jar")) && outputDirOrFile.getParentFile().exists()) ||
+                    (outputDirOrFile.getName().endsWith(".apk") || outputDirOrFile.getName().endsWith(".jar"))){
+
+                Map<String, String> env = new HashMap<>();
+                env.put("create", "true");
+                env.put("encoding", "UTF-8");
+                // locate file system by using the syntax
+                // defined in java.net.JarURLConnection
+                URI uri = null;
+                //System.out.println(uri.toString());
+                try {
+
+                    if (outputDirOrFile.getName().endsWith(".apk") || outputDirOrFile.getName().endsWith(".jar")) {
+                        uri = URI.create("jar:" + outputDirOrFile.toURI());
+                        zipfs = FileSystems.newFileSystem(uri, env);
+                        System.out.println(zipfs.getPath("classes.dex"));
+                        outputZip = zipfs.getPath("classes.dex");
+                    } else {
+                        uri = URI.create("jar:" + outputDirOrFile.getParentFile().toURI());
+                        zipfs = FileSystems.newFileSystem(uri, env);
+                        outputZip = zipfs.getPath(outputDirOrFile.getName());
+                    }
+                } catch (IOException e) {
+                    e.printStackTrace();
+                }
+
             }
+
             try {
-                Baksmali.assemble(getOptions(), classesSet, jobs, outputDirOrFile);
+                ConcurrentHashMap<String,byte[]> classesSet = new ConcurrentHashMap<>();
+                if (!Baksmali.disassembleDexFile(dexFile, classesSet, jobs, getOptions(), classes)) {
+                    System.exit(-1);
+                }
+                if (outputZip != null){
+                    if (!Baksmali.assemble(getOptions(), classesSet, jobs, outputZip)) {
+                        System.exit(-1);
+                    }
+                } else {
+                    if (!Baksmali.assemble(getOptions(), classesSet, jobs, outputDirOrFile)) {
+                        System.exit(-1);
+                    }
+                }
             } catch (IOException ex) {
                 throw new RuntimeException(ex);
+            } finally {
+                if (zipfs != null && zipfs.isOpen()) {
+                    try {
+                        zipfs.close();
+                    } catch (IOException e) {
+                        e.printStackTrace();
+                    }
+                }
             }
+
         }
     }
 
@@ -271,6 +324,7 @@ public class DisassembleCommand extends DexInputCommand {
         options.accessorComments = accessorComments;
         options.implicitReferences = implicitReferences;
         options.normalizeVirtualMethods = normalizeVirtualMethods;
+        options.apiLevel = apiLevel;
 
         options.registerInfo = 0;
 
