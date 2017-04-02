@@ -54,7 +54,6 @@ import java.nio.file.Path;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
 
 @Parameters(commandDescription = "Disassembles a dex file.")
 @ExtendedParameters(
@@ -227,21 +226,19 @@ public class DisassembleCommand extends DexInputCommand {
             }
 
             try {
-                ConcurrentHashMap<String,byte[]> classesSet = new ConcurrentHashMap<>();
-                if (!Baksmali.disassembleDexFile(dexFile, classesSet, jobs, getOptions(), classes)) {
-                    System.exit(-1);
-                }
                 if (outputZip != null){
-                    if (!Baksmali.assemble(getOptions(), classesSet, jobs, outputZip)) {
+                    if (!Baksmali.DeoptimizeOdexFile(dexFile, outputZip, jobs, getOptions(), classes)) {
                         System.exit(-1);
                     }
                 } else {
-                    if (!Baksmali.assemble(getOptions(), classesSet, jobs, outputDirOrFile)) {
+                    if (!Baksmali.DeoptimizeOdexFile(dexFile, outputDirOrFile, jobs, getOptions(), classes)) {
                         System.exit(-1);
                     }
                 }
             } catch (IOException ex) {
                 throw new RuntimeException(ex);
+            } catch (Exception e) {
+                e.printStackTrace();
             } finally {
                 if (zipfs != null && zipfs.isOpen()) {
                     try {
