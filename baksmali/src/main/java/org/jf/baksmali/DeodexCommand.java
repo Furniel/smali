@@ -182,14 +182,12 @@ public class DeodexCommand extends DisassembleCommand {
                         System.exit(-1);
                     }
                 } else {
-                    if (!Baksmali.DeoptimizeOdexFile(dexFile, outputDirOrFile, jobs, getOptions(), classes)) {
+                    if (!Baksmali.DeoptimizeOdexFile(dexFile, outputDirOrFile.toPath(), jobs, getOptions(), classes)) {
                         System.exit(-1);
                     }
                 }
-            } catch (IOException ex) {
+            } catch (Exception ex) {
                 throw new RuntimeException(ex);
-            } catch (Exception e) {
-                e.printStackTrace();
             } finally {
                 if (zipfs != null && zipfs.isOpen()) {
                     try {

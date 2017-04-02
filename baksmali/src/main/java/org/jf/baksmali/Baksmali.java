@@ -39,7 +39,7 @@ import org.jf.dexlib2.Opcodes;
 import org.jf.dexlib2.iface.ClassDef;
 import org.jf.dexlib2.iface.DexFile;
 import org.jf.dexlib2.writer.builder.DexBuilder;
-import org.jf.dexlib2.writer.io.FileDataStore;
+import org.jf.dexlib2.writer.io.MemoryDataStore;
 import org.jf.smali.LexerErrorInterface;
 import org.jf.smali.smaliFlexLexer;
 import org.jf.smali.smaliParser;
@@ -51,8 +51,9 @@ import javax.annotation.Nullable;
 import java.io.*;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.StandardCopyOption;
-import java.util.*;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
 import java.util.concurrent.*;
 
 public class Baksmali {
@@ -183,23 +184,6 @@ public class Baksmali {
 
     public static boolean DeoptimizeOdexFile(DexFile dexFile, Path outputFile, int jobs, final BaksmaliOptions options,
                                              @Nullable List<String> classes) throws Exception {
-        File tmp = File.createTempFile("smali",".dex");
-        if (!Baksmali.DeoptimizeOdexFile(dexFile, tmp, jobs, options, classes)) {
-            if (tmp.exists()){
-                tmp.delete();
-            }
-            return false;
-        }
-        Files.copy(tmp.toPath(), outputFile, StandardCopyOption.REPLACE_EXISTING);
-        if (tmp.exists()){
-            tmp.delete();
-        }
-        return true;
-    }
-
-
-    public static boolean DeoptimizeOdexFile(DexFile dexFile, File outputFile, int jobs, final BaksmaliOptions options,
-                                             @Nullable List<String> classes) throws Exception {
 
         //sort the classes, so that if we're on a case-insensitive file system and need to handle classes with file
         //name collisions, then we'll use the same name for each class, if the dex file goes through multiple
@@ -224,7 +208,7 @@ public class Baksmali {
             tasks.add(executor.submit(new Callable<Boolean>() {
                 @Override
                 public Boolean call() throws Exception {
-                    return assembleSmaliFile(disassembleClass(classDef, options) , dexBuilder, options);
+                    return deoptimizeClass(classDef, dexBuilder,options);
                 }
             }));
         }
@@ -253,12 +237,16 @@ public class Baksmali {
             return false;
         }
 
-        dexBuilder.writeTo(new FileDataStore(outputFile));
+        MemoryDataStore data = new MemoryDataStore();
+
+        dexBuilder.writeTo(data);
+
+        Files.write(outputFile, getTrimmedData(data.getData()));
 
         return true;
     }
 
-    private static byte[] disassembleClass(ClassDef classDef, BaksmaliOptions options) {
+    private static boolean deoptimizeClass (ClassDef classDef, DexBuilder dexBuilder, BaksmaliOptions options) {
         /**
          * The path for the disassembly file is based on the package name
          * The class descriptor will look something like:
@@ -272,75 +260,61 @@ public class Baksmali {
         if (classDescriptor.charAt(0) != 'L' ||
                 classDescriptor.charAt(classDescriptor.length() - 1) != ';') {
             System.err.println("Unrecognized class descriptor - " + classDescriptor + " - skipping class");
-            return null;
+            return false;
         }
         //create and initialize the top level string template
         ClassDefinition classDefinition = new ClassDefinition(options, classDef);
 
         //write the disassembly
-        Writer writer = null;
-        try {
-            ByteArrayOutputStream bos = new ByteArrayOutputStream();
-            OutputStreamWriter outWriter = new OutputStreamWriter(bos, "UTF8");
-            writer = new IndentingWriter(outWriter);
+        try (ByteArrayOutputStream bos = new ByteArrayOutputStream();
+             OutputStreamWriter outWriter = new OutputStreamWriter(bos, "UTF8");
+             Writer writer = new IndentingWriter(outWriter))
+        {
             classDefinition.writeTo((IndentingWriter) writer);
             writer.flush();
             byte[] arr = bos.toByteArray();
-            bos.close();
-            return arr;
+            try (ByteArrayInputStream bis = new ByteArrayInputStream(arr);
+                 InputStreamReader reader = new InputStreamReader(bis, "UTF-8"))
+            {
+                LexerErrorInterface lexer = new smaliFlexLexer(reader);
+                CommonTokenStream tokens = new CommonTokenStream((TokenSource) lexer);
+
+
+                smaliParser parser = new smaliParser(tokens);
+                parser.setApiLevel(options.apiLevel);
+
+                smaliParser.smali_file_return result = parser.smali_file();
+
+                if (parser.getNumberOfSyntaxErrors() > 0 || lexer.getNumberOfSyntaxErrors() > 0) {
+                    return false;
+                }
+
+                CommonTree t = result.getTree();
+
+                CommonTreeNodeStream treeStream = new CommonTreeNodeStream(t);
+                treeStream.setTokenStream(tokens);
+
+                smaliTreeWalker dexGen = new smaliTreeWalker(treeStream);
+                dexGen.setApiLevel(options.apiLevel);
+                dexGen.setDexBuilder(dexBuilder);
+                dexGen.smali_file();
+
+                return dexGen.getNumberOfSyntaxErrors() == 0;
+            }
         } catch (Exception ex) {
             System.err.println("\n\nError occurred while disassembling class " + classDescriptor.replace('/', '.') + " - skipping class");
             ex.printStackTrace();
             // noinspection ResultOfMethodCallIgnored
-            return null;
-        } finally {
-            if (writer != null) {
-                try {
-                    writer.close();
-                } catch (Throwable ex) {
-                    System.err.println("\n\nError occurred while closing output ");
-                    ex.printStackTrace();
-                }
-            }
+            return false;
         }
     }
 
-    private static boolean assembleSmaliFile(byte[] bytes, DexBuilder dexBuilder, BaksmaliOptions options)
-            throws Exception {
-        ByteArrayInputStream bis = null;
-        try {
-            bis = new ByteArrayInputStream(bytes);
-            InputStreamReader reader = new InputStreamReader(bis, "UTF-8");
+    private static byte[] getTrimmedData(byte[] bytes) {
+            int i = bytes.length;
+            while (i-- > 0 && bytes[i] == 00) {}
+            byte[] output = new byte[i+2];
+            System.arraycopy(bytes, 0, output, 0, i+2);
 
-            LexerErrorInterface lexer = new smaliFlexLexer(reader);
-            CommonTokenStream tokens = new CommonTokenStream((TokenSource) lexer);
-
-
-            smaliParser parser = new smaliParser(tokens);
-            parser.setApiLevel(options.apiLevel);
-
-            smaliParser.smali_file_return result = parser.smali_file();
-
-            if (parser.getNumberOfSyntaxErrors() > 0 || lexer.getNumberOfSyntaxErrors() > 0) {
-                return false;
-            }
-
-            CommonTree t = result.getTree();
-
-            CommonTreeNodeStream treeStream = new CommonTreeNodeStream(t);
-            treeStream.setTokenStream(tokens);
-
-            smaliTreeWalker dexGen = new smaliTreeWalker(treeStream);
-            dexGen.setApiLevel(options.apiLevel);
-            dexGen.setDexBuilder(dexBuilder);
-            dexGen.smali_file();
-
-            return dexGen.getNumberOfSyntaxErrors() == 0;
-        } finally {
-            if (bis != null) {
-                bis.close();
-            }
-        }
-
+            return output;
     }
 }
