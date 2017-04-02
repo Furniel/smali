@@ -35,6 +35,7 @@ import com.beust.jcommander.JCommander;
 import com.beust.jcommander.Parameter;
 import com.beust.jcommander.Parameters;
 import com.beust.jcommander.ParametersDelegate;
+import com.google.common.collect.Lists;
 import org.jf.baksmali.AnalysisArguments.CheckPackagePrivateArgument;
 import org.jf.dexlib2.analysis.CustomInlineMethodResolver;
 import org.jf.dexlib2.analysis.InlineMethodResolver;
@@ -45,7 +46,13 @@ import org.jf.util.jcommander.ExtendedParameters;
 import javax.annotation.Nonnull;
 import java.io.File;
 import java.io.IOException;
+import java.net.URI;
+import java.nio.file.FileSystem;
+import java.nio.file.FileSystems;
+import java.nio.file.Path;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 @Parameters(commandDescription = "Deodexes an odex/oat file")
 @ExtendedParameters(
@@ -95,15 +102,112 @@ public class DeodexCommand extends DisassembleCommand {
         return options;
     }
 
+    @Override
+    public void run() {
+        if (help || inputList == null || inputList.isEmpty()) {
+            usage();
+            return;
+        }
+
+        if (inputList.size() > 1) {
+            System.err.println("Too many files specified");
+            usage();
+            return;
+        }
+
+        String input = inputList.get(0);
+        loadDexFile(input);
+
+        File outputDirOrFile = new File(output);
+        if (!outputDirOrFile.exists()) {
+            if (outputDirOrFile.getName().endsWith(".dex")) {
+                if (outputDirOrFile.getParentFile() != null && !outputDirOrFile.getParentFile().getName().endsWith(".apk") &&
+                        !outputDirOrFile.getParentFile().getName().endsWith(".jar")) {
+                    if (!outputDirOrFile.getParentFile().mkdirs()) {
+                        System.err.println("Can't create the output directory " + output);
+                        System.exit(-1);
+                    }
+                }
+            } else {
+                if (!outputDirOrFile.mkdirs()) {
+                    System.err.println("Can't create the output directory " + output);
+                    System.exit(-1);
+                }
+            }
+        }
+
+        if (analysisArguments.classPathDirectories == null || analysisArguments.classPathDirectories.isEmpty()) {
+            analysisArguments.classPathDirectories = Lists.newArrayList(inputFile.getAbsoluteFile().getParent());
+        }
+
+        if (outputDirOrFile.exists() && outputDirOrFile.isDirectory()) {
+            if (!Baksmali.disassembleDexFile(dexFile, outputDirOrFile, jobs, getOptions(), classes)) {
+                System.exit(-1);
+            }
+        } else {
+            FileSystem zipfs = null;
+            Path outputZip = null;
+            if ((outputDirOrFile.getParentFile() != null && (outputDirOrFile.getParentFile().getName().endsWith(".apk") ||
+                    outputDirOrFile.getParentFile().getName().endsWith(".jar")) && outputDirOrFile.getParentFile().exists()) ||
+                    (outputDirOrFile.getName().endsWith(".apk") || outputDirOrFile.getName().endsWith(".jar"))) {
+
+                Map<String, String> env = new HashMap<>();
+                env.put("create", "true");
+                env.put("encoding", "UTF-8");
+                // locate file system by using the syntax
+                // defined in java.net.JarURLConnection
+                URI uri = null;
+                //System.out.println(uri.toString());
+                try {
+
+                    if (outputDirOrFile.getName().endsWith(".apk") || outputDirOrFile.getName().endsWith(".jar")) {
+                        uri = URI.create("jar:" + outputDirOrFile.toURI());
+                        zipfs = FileSystems.newFileSystem(uri, env);
+                        System.out.println(zipfs.getPath("classes.dex"));
+                        outputZip = zipfs.getPath("classes.dex");
+                    } else {
+                        uri = URI.create("jar:" + outputDirOrFile.getParentFile().toURI());
+                        zipfs = FileSystems.newFileSystem(uri, env);
+                        outputZip = zipfs.getPath(outputDirOrFile.getName());
+                    }
+                } catch (IOException e) {
+                    e.printStackTrace();
+                }
+
+            }
+
+            try {
+                if (outputZip != null) {
+                    if (!Baksmali.DeoptimizeOdexFile(dexFile, outputZip, jobs, getOptions(), classes)) {
+                        System.exit(-1);
+                    }
+                } else {
+                    if (!Baksmali.DeoptimizeOdexFile(dexFile, outputDirOrFile, jobs, getOptions(), classes)) {
+                        System.exit(-1);
+                    }
+                }
+            } catch (IOException ex) {
+                throw new RuntimeException(ex);
+            } catch (Exception e) {
+                e.printStackTrace();
+            } finally {
+                if (zipfs != null && zipfs.isOpen()) {
+                    try {
+                        zipfs.close();
+                    } catch (IOException e) {
+                        e.printStackTrace();
+                    }
+                }
+            }
+
+        }
+    }
+
     @Override protected boolean shouldCheckPackagePrivateAccess() {
         return checkPackagePrivateArgument.checkPackagePrivateAccess;
     }
 
     @Override protected boolean needsClassPath() {
         return true;
-    }
-
-    @Override protected boolean showDeodexWarning() {
-        return false;
     }
 }

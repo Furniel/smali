@@ -47,11 +47,6 @@ import org.xml.sax.SAXException;
 import javax.annotation.Nonnull;
 import java.io.File;
 import java.io.IOException;
-import java.net.URI;
-import java.nio.file.FileSystem;
-import java.nio.file.FileSystems;
-import java.nio.file.Path;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -63,7 +58,7 @@ public class DisassembleCommand extends DexInputCommand {
 
     @Parameter(names = {"-h", "-?", "--help"}, help = true,
             description = "Show usage information for this command.")
-    private boolean help;
+    boolean help;
 
     @ParametersDelegate
     protected AnalysisArguments analysisArguments = new AnalysisArguments();
@@ -91,7 +86,7 @@ public class DisassembleCommand extends DexInputCommand {
             description = "The number of threads to use. Defaults to the number of cores available.",
             validateWith = PositiveInteger.class)
     @ExtendedParameter(argumentNames = "n")
-    private int jobs = Runtime.getRuntime().availableProcessors();
+    int jobs = Runtime.getRuntime().availableProcessors();
 
     @Parameter(names = {"-l", "--use-locals"},
             description = "When disassembling, output the .locals directive with the number of non-parameter " +
@@ -112,7 +107,7 @@ public class DisassembleCommand extends DexInputCommand {
     @Parameter(names = {"-o", "--output"},
             description = "The directory or dex file to write the disassembled files to.")
     @ExtendedParameter(argumentNames = "dir")
-    private String output = "out";
+    String output = "out";
 
     @Parameter(names = {"--parameter-registers", "--preg", "--pr"}, arity = 1,
             description = "Use the pNN syntax for registers that refer to a method parameter on method entry. True " +
@@ -140,7 +135,7 @@ public class DisassembleCommand extends DexInputCommand {
     @Parameter(names = "--classes",
             description = "A comma separated list of classes. Only disassemble these classes")
     @ExtendedParameter(argumentNames = "classes")
-    private List<String> classes = null;
+    List<String> classes = null;
 
     public DisassembleCommand(@Nonnull List<JCommander> commandAncestors) {
         super(commandAncestors);
@@ -167,21 +162,11 @@ public class DisassembleCommand extends DexInputCommand {
                             "re-assemble the results unless you deodex it. See \"baksmali help deodex\"");
         }
 
-        File outputDirOrFile = new File(output);
-        if (!outputDirOrFile.exists()) {
-            if (outputDirOrFile.getName().endsWith(".dex")){
-                if (outputDirOrFile.getParentFile() != null && !outputDirOrFile.getParentFile().getName().endsWith(".apk") &&
-                        !outputDirOrFile.getParentFile().getName().endsWith(".jar")) {
-                    if (!outputDirOrFile.getParentFile().mkdirs()) {
-                        System.err.println("Can't create the output directory " + output);
-                        System.exit(-1);
-                    }
-                }
-            } else {
-                if (!outputDirOrFile.mkdirs()) {
-                    System.err.println("Can't create the output directory " + output);
-                    System.exit(-1);
-                }
+        File outputDirectoryFile = new File(output);
+        if (!outputDirectoryFile.exists()) {
+            if (!outputDirectoryFile.mkdirs()) {
+                System.err.println("Can't create the output directory " + output);
+                System.exit(-1);
             }
         }
 
@@ -189,66 +174,8 @@ public class DisassembleCommand extends DexInputCommand {
             analysisArguments.classPathDirectories = Lists.newArrayList(inputFile.getAbsoluteFile().getParent());
         }
 
-        if (outputDirOrFile.exists() && outputDirOrFile.isDirectory()) {
-            if (!Baksmali.disassembleDexFile(dexFile, outputDirOrFile, jobs, getOptions(), classes)) {
-                System.exit(-1);
-            }
-        } else {
-            FileSystem zipfs = null;
-            Path outputZip = null;
-            if ((outputDirOrFile.getParentFile() != null && (outputDirOrFile.getParentFile().getName().endsWith(".apk") ||
-                    outputDirOrFile.getParentFile().getName().endsWith(".jar")) && outputDirOrFile.getParentFile().exists()) ||
-                    (outputDirOrFile.getName().endsWith(".apk") || outputDirOrFile.getName().endsWith(".jar"))){
-
-                Map<String, String> env = new HashMap<>();
-                env.put("create", "true");
-                env.put("encoding", "UTF-8");
-                // locate file system by using the syntax
-                // defined in java.net.JarURLConnection
-                URI uri = null;
-                //System.out.println(uri.toString());
-                try {
-
-                    if (outputDirOrFile.getName().endsWith(".apk") || outputDirOrFile.getName().endsWith(".jar")) {
-                        uri = URI.create("jar:" + outputDirOrFile.toURI());
-                        zipfs = FileSystems.newFileSystem(uri, env);
-                        System.out.println(zipfs.getPath("classes.dex"));
-                        outputZip = zipfs.getPath("classes.dex");
-                    } else {
-                        uri = URI.create("jar:" + outputDirOrFile.getParentFile().toURI());
-                        zipfs = FileSystems.newFileSystem(uri, env);
-                        outputZip = zipfs.getPath(outputDirOrFile.getName());
-                    }
-                } catch (IOException e) {
-                    e.printStackTrace();
-                }
-
-            }
-
-            try {
-                if (outputZip != null){
-                    if (!Baksmali.DeoptimizeOdexFile(dexFile, outputZip, jobs, getOptions(), classes)) {
-                        System.exit(-1);
-                    }
-                } else {
-                    if (!Baksmali.DeoptimizeOdexFile(dexFile, outputDirOrFile, jobs, getOptions(), classes)) {
-                        System.exit(-1);
-                    }
-                }
-            } catch (IOException ex) {
-                throw new RuntimeException(ex);
-            } catch (Exception e) {
-                e.printStackTrace();
-            } finally {
-                if (zipfs != null && zipfs.isOpen()) {
-                    try {
-                        zipfs.close();
-                    } catch (IOException e) {
-                        e.printStackTrace();
-                    }
-                }
-            }
-
+        if (!Baksmali.disassembleDexFile(dexFile, outputDirectoryFile, jobs, getOptions(), classes)) {
+            System.exit(-1);
         }
     }
 
