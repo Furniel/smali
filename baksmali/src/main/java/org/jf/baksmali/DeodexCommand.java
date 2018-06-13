@@ -49,6 +49,7 @@ import java.io.IOException;
 import java.net.URI;
 import java.nio.file.FileSystem;
 import java.nio.file.FileSystems;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.HashMap;
 import java.util.List;
@@ -147,6 +148,7 @@ public class DeodexCommand extends DisassembleCommand {
         } else {
             FileSystem zipfs = null;
             Path outputZip = null;
+            File fallbackfile = null;
             if ((outputDirOrFile.getParentFile() != null && (outputDirOrFile.getParentFile().getName().endsWith(".apk") ||
                     outputDirOrFile.getParentFile().getName().endsWith(".jar")) && outputDirOrFile.getParentFile().exists()) ||
                     (outputDirOrFile.getName().endsWith(".apk") || outputDirOrFile.getName().endsWith(".jar"))) {
@@ -156,16 +158,18 @@ public class DeodexCommand extends DisassembleCommand {
                 env.put("encoding", "UTF-8");
                 // locate file system by using the syntax
                 // defined in java.net.JarURLConnection
-                URI uri = null;
+                URI uri;
                 //System.out.println(uri.toString());
                 try {
 
                     if (outputDirOrFile.getName().endsWith(".apk") || outputDirOrFile.getName().endsWith(".jar")) {
+                        fallbackfile = outputDirOrFile;
                         uri = URI.create("jar:" + outputDirOrFile.toURI());
                         zipfs = FileSystems.newFileSystem(uri, env);
-                        System.out.println(zipfs.getPath("classes.dex"));
+                        //System.out.println(zipfs.getPath("classes.dex"));
                         outputZip = zipfs.getPath("classes.dex");
                     } else {
+                        fallbackfile = outputDirOrFile.getParentFile();
                         uri = URI.create("jar:" + outputDirOrFile.getParentFile().toURI());
                         zipfs = FileSystems.newFileSystem(uri, env);
                         outputZip = zipfs.getPath(outputDirOrFile.getName());
@@ -178,8 +182,16 @@ public class DeodexCommand extends DisassembleCommand {
 
             try {
                 if (outputZip != null) {
-                    if (!Baksmali.DeoptimizeOdexFile(dexFile, outputZip, jobs, getOptions(), classes)) {
-                        System.exit(-1);
+                    if (!Files.isWritable(outputZip)){
+                        System.err.println(outputZip + " is read only.");
+                        System.err.println( "Deodexing to " + fallbackfile.getParentFile() + File.separator + outputZip.getFileName());
+                        if (!Baksmali.DeoptimizeOdexFile(dexFile, new File(fallbackfile.getParentFile() + File.separator + outputZip.getFileName()).toPath(), jobs, getOptions(), classes)) {
+                            System.exit(-1);
+                        }
+                    } else {
+                        if (!Baksmali.DeoptimizeOdexFile(dexFile, outputZip, jobs, getOptions(), classes)) {
+                            System.exit(-1);
+                        }
                     }
                 } else {
                     if (!Baksmali.DeoptimizeOdexFile(dexFile, outputDirOrFile.toPath(), jobs, getOptions(), classes)) {
