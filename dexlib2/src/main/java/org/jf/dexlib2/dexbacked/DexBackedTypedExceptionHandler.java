@@ -38,12 +38,12 @@ public class DexBackedTypedExceptionHandler extends DexBackedExceptionHandler {
     private final int typeId;
     private final int handlerCodeAddress;
 
-    public DexBackedTypedExceptionHandler(@Nonnull DexReader reader) {
-        this.dexFile = reader.dexBuf;
+    public DexBackedTypedExceptionHandler(@Nonnull DexBackedDexFile dexFile, @Nonnull DexReader reader) {
+        this.dexFile = dexFile;
         this.typeId = reader.readSmallUleb128();
         this.handlerCodeAddress = reader.readSmallUleb128();
     }
 
-    @Nonnull @Override public String getExceptionType() { return dexFile.getType(typeId); }
+    @Nonnull @Override public String getExceptionType() { return dexFile.getTypeSection().get(typeId); }
     @Override public int getHandlerCodeAddress() { return handlerCodeAddress; }
 }

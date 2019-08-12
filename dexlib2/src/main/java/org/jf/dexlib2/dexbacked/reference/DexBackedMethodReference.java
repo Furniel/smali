@@ -44,39 +44,43 @@ import java.util.List;
 
 public class DexBackedMethodReference extends BaseMethodReference {
     @Nonnull public final DexBackedDexFile dexFile;
-    public final int methodIdItemOffset;
+    private final int methodIndex;
     private int protoIdItemOffset;
 
     public DexBackedMethodReference(@Nonnull DexBackedDexFile dexFile, int methodIndex) {
         this.dexFile = dexFile;
-        this.methodIdItemOffset = dexFile.getMethodIdItemOffset(methodIndex);
+        this.methodIndex = methodIndex;
     }
 
     @Nonnull
     @Override
     public String getDefiningClass() {
-        return dexFile.getType(dexFile.readUshort(methodIdItemOffset + MethodIdItem.CLASS_OFFSET));
+        return dexFile.getTypeSection().get(dexFile.getBuffer().readUshort(
+                dexFile.getMethodSection().getOffset(methodIndex) + MethodIdItem.CLASS_OFFSET));
     }
 
     @Nonnull
     @Override
     public String getName() {
-        return dexFile.getString(dexFile.readSmallUint(methodIdItemOffset + MethodIdItem.NAME_OFFSET));
+        return dexFile.getStringSection().get(dexFile.getBuffer().readSmallUint(
+                dexFile.getMethodSection().getOffset(methodIndex) + MethodIdItem.NAME_OFFSET));
     }
 
     @Nonnull
     @Override
     public List<String> getParameterTypes() {
         int protoIdItemOffset = getProtoIdItemOffset();
-        final int parametersOffset = dexFile.readSmallUint(protoIdItemOffset + ProtoIdItem.PARAMETERS_OFFSET);
+        final int parametersOffset = dexFile.getBuffer().readSmallUint(
+                protoIdItemOffset + ProtoIdItem.PARAMETERS_OFFSET);
         if (parametersOffset > 0) {
-            final int parameterCount = dexFile.readSmallUint(parametersOffset + TypeListItem.SIZE_OFFSET);
+            final int parameterCount =
+                    dexFile.getDataBuffer().readSmallUint(parametersOffset + TypeListItem.SIZE_OFFSET);
             final int paramListStart = parametersOffset + TypeListItem.LIST_OFFSET;
             return new FixedSizeList<String>() {
                 @Nonnull
                 @Override
                 public String readItem(final int index) {
-                    return dexFile.getType(dexFile.readUshort(paramListStart + 2*index));
+                    return dexFile.getTypeSection().get(dexFile.getDataBuffer().readUshort(paramListStart + 2*index));
                 }
                 @Override public int size() { return parameterCount; }
             };
@@ -88,13 +92,14 @@ public class DexBackedMethodReference extends BaseMethodReference {
     @Override
     public String getReturnType() {
         int protoIdItemOffset = getProtoIdItemOffset();
-        return dexFile.getType(dexFile.readSmallUint(protoIdItemOffset + ProtoIdItem.RETURN_TYPE_OFFSET));
+        return dexFile.getTypeSection().get(
+                dexFile.getBuffer().readSmallUint(protoIdItemOffset + ProtoIdItem.RETURN_TYPE_OFFSET));
     }
 
     private int getProtoIdItemOffset() {
         if (protoIdItemOffset == 0) {
-            protoIdItemOffset = dexFile.getProtoIdItemOffset(
-                    dexFile.readUshort(methodIdItemOffset + MethodIdItem.PROTO_OFFSET));
+            protoIdItemOffset = dexFile.getProtoSection().getOffset(dexFile.getBuffer().readUshort(
+                    dexFile.getMethodSection().getOffset(methodIndex) + MethodIdItem.PROTO_OFFSET));
         }
         return protoIdItemOffset;
     }
@@ -108,5 +113,12 @@ public class DexBackedMethodReference extends BaseMethodReference {
      */
     public int getSize() {
         return MethodIdItem.ITEM_SIZE; //ushort + ushort + uint for indices
+    }
+
+    @Override
+    public void validateReference() throws InvalidReferenceException {
+        if (methodIndex < 0 || methodIndex >= dexFile.getMethodSection().size()) {
+            throw new InvalidReferenceException("method@" + methodIndex);
+        }
     }
 }

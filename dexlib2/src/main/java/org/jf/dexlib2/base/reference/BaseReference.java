@@ -1,5 +1,5 @@
 /*
- * Copyright 2013, Google Inc.
+ * Copyright 2019, Google Inc.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -29,38 +29,13 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-package org.jf.dexlib2.dexbacked.raw;
+package org.jf.dexlib2.base.reference;
 
-import org.jf.dexlib2.Opcodes;
-import org.jf.dexlib2.dexbacked.BaseDexBuffer;
-import org.jf.dexlib2.dexbacked.DexBackedDexFile;
-import org.jf.dexlib2.util.AnnotatedBytes;
+import org.jf.dexlib2.iface.reference.Reference;
 
-import javax.annotation.Nonnull;
-import java.io.IOException;
-import java.io.Writer;
-import java.util.Arrays;
-
-public class RawDexFile extends DexBackedDexFile {
-    @Nonnull public final HeaderItem headerItem;
-
-    public RawDexFile(@Nonnull Opcodes opcodes, @Nonnull BaseDexBuffer buf) {
-        super(opcodes, buf);
-        this.headerItem = new HeaderItem(this);
-    }
-
-    public RawDexFile(@Nonnull Opcodes opcodes, @Nonnull byte[] buf) {
-        super(opcodes, buf);
-        this.headerItem = new HeaderItem(this);
-    }
-
-    @Nonnull
-    public byte[] readByteRange(int start, int length) {
-        return Arrays.copyOfRange(getBuf(), getBaseOffset() + start, getBaseOffset() + start + length);
-    }
-
-    public void writeAnnotations(@Nonnull Writer out, @Nonnull AnnotatedBytes annotatedBytes) throws IOException {
-        // TODO: need to pass in the offset
-        annotatedBytes.writeAnnotations(out, getBuf());
+public abstract class BaseReference implements Reference {
+    @Override
+    public void validateReference() throws InvalidReferenceException {
+        // A reference is valid by default
     }
 }

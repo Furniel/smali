@@ -48,18 +48,18 @@ public class DexBackedMethodHandleReference extends BaseMethodHandleReference {
     public DexBackedMethodHandleReference(DexBackedDexFile dexFile, int methodHandleIndex) {
         this.dexFile = dexFile;
         this.methodHandleIndex = methodHandleIndex;
-        this.methodHandleOffset = dexFile.getMethodHandleItemOffset(methodHandleIndex);
+        this.methodHandleOffset = dexFile.getMethodHandleSection().getOffset(methodHandleIndex);
     }
 
     @Override
     public int getMethodHandleType() {
-        return dexFile.readUshort(methodHandleOffset + MethodHandleItem.METHOD_HANDLE_TYPE_OFFSET);
+        return dexFile.getBuffer().readUshort(methodHandleOffset + MethodHandleItem.METHOD_HANDLE_TYPE_OFFSET);
     }
 
     @Nonnull
     @Override
     public Reference getMemberReference() {
-        int memberIndex = dexFile.readUshort(methodHandleOffset + MethodHandleItem.MEMBER_ID_OFFSET);
+        int memberIndex = dexFile.getBuffer().readUshort(methodHandleOffset + MethodHandleItem.MEMBER_ID_OFFSET);
         switch (getMethodHandleType()) {
             case MethodHandleType.STATIC_PUT:
             case MethodHandleType.STATIC_GET:
@@ -74,6 +74,19 @@ public class DexBackedMethodHandleReference extends BaseMethodHandleReference {
                 return new DexBackedMethodReference(dexFile, memberIndex);
             default:
                 throw new ExceptionWithContext("Invalid method handle type: %d", getMethodHandleType());
+        }
+    }
+
+    @Override
+    public void validateReference() throws InvalidReferenceException {
+        if (methodHandleIndex < 0 || methodHandleIndex >= dexFile.getMethodHandleSection().size()) {
+            throw new InvalidReferenceException("methodhandle@" + methodHandleIndex);
+        }
+
+        try {
+            getMemberReference();
+        } catch (ExceptionWithContext ex) {
+            throw new InvalidReferenceException("methodhandle@" + methodHandleIndex, ex);
         }
     }
 }

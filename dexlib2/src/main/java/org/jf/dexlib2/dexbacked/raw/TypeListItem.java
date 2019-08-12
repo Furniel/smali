@@ -51,11 +51,11 @@ public class TypeListItem {
 
             @Override
             protected void annotateItem(@Nonnull AnnotatedBytes out, int itemIndex, @Nullable String itemIdentity) {
-                int size = dexFile.readSmallUint(out.getCursor());
+                int size = dexFile.getBuffer().readSmallUint(out.getCursor());
                 out.annotate(4, "size: %d", size);
 
                 for (int i=0; i<size; i++) {
-                    int typeIndex = dexFile.readUshort(out.getCursor());
+                    int typeIndex = dexFile.getBuffer().readUshort(out.getCursor());
                     out.annotate(2, TypeIdItem.getReferenceAnnotation(dexFile, typeIndex));
                 }
             }
@@ -89,10 +89,10 @@ public class TypeListItem {
 
         StringBuilder sb = new StringBuilder();
 
-        int size = dexFile.readSmallUint(typeListOffset);
+        int size = dexFile.getDataBuffer().readSmallUint(typeListOffset);
         for (int i=0; i<size; i++) {
-            int typeIndex = dexFile.readUshort(typeListOffset + 4 + i*2);
-            String type = dexFile.getType(typeIndex);
+            int typeIndex = dexFile.getDataBuffer().readUshort(typeListOffset + 4 + i*2);
+            String type = dexFile.getTypeSection().get(typeIndex);
             sb.append(type);
         }
         return sb.toString();

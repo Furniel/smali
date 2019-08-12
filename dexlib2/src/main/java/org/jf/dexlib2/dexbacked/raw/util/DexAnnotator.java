@@ -34,6 +34,8 @@ package org.jf.dexlib2.dexbacked.raw.util;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Ordering;
 import com.google.common.primitives.Ints;
+import org.jf.dexlib2.dexbacked.CDexBackedDexFile;
+import org.jf.dexlib2.dexbacked.DexBackedDexFile;
 import org.jf.dexlib2.dexbacked.raw.*;
 import org.jf.dexlib2.util.AnnotatedBytes;
 
@@ -46,7 +48,7 @@ import java.util.List;
 import java.util.Map;
 
 public class DexAnnotator extends AnnotatedBytes {
-    @Nonnull public final RawDexFile dexFile;
+    @Nonnull public final DexBackedDexFile dexFile;
 
     private final Map<Integer, SectionAnnotator> annotators = Maps.newHashMap();
     private static final Map<Integer, Integer> sectionAnnotationOrder = Maps.newHashMap();
@@ -84,7 +86,7 @@ public class DexAnnotator extends AnnotatedBytes {
         }
     }
 
-    public DexAnnotator(@Nonnull RawDexFile dexFile, int width) {
+    public DexAnnotator(@Nonnull DexBackedDexFile dexFile, int width) {
         super(width);
 
         this.dexFile = dexFile;
@@ -169,12 +171,24 @@ public class DexAnnotator extends AnnotatedBytes {
         mapItems = ordering.immutableSortedCopy(mapItems);
 
         try {
+            // Need to annotate the debug info offset table first, to propagate the debug info identities
+            if (dexFile instanceof CDexBackedDexFile) {
+                moveTo(dexFile.getBaseDataOffset() + ((CDexBackedDexFile) dexFile).getDebugInfoOffsetsPos());
+                CdexDebugOffsetTable.annotate(this, dexFile.getBuffer());
+            }
+
             for (MapItem mapItem: mapItems) {
-                SectionAnnotator annotator = annotators.get(mapItem.getType());
-                annotator.annotateSection(this);
+                try {
+                    SectionAnnotator annotator = annotators.get(mapItem.getType());
+                    annotator.annotateSection(this);
+                } catch (Exception ex) {
+                    System.err.println(String.format("There was an error while dumping the %s section",
+                            ItemType.getItemTypeName(mapItem.getType())));
+                    ex.printStackTrace(System.err);
+                }
             }
         } finally {
-            dexFile.writeAnnotations(out, this);
+            writeAnnotations(out, dexFile.getBuffer().getBuf(), dexFile.getBuffer().getBaseOffset());
         }
     }
 

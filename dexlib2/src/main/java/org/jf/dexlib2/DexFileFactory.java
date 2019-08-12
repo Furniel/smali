@@ -41,7 +41,6 @@ import org.jf.dexlib2.dexbacked.DexBackedDexFile.NotADexFile;
 import org.jf.dexlib2.dexbacked.DexBackedOdexFile;
 import org.jf.dexlib2.dexbacked.OatFile;
 import org.jf.dexlib2.dexbacked.OatFile.NotAnOatFileException;
-import org.jf.dexlib2.dexbacked.OatFile.OatDexFile;
 import org.jf.dexlib2.dexbacked.OatFile.VdexProvider;
 import org.jf.dexlib2.dexbacked.ZipDexContainer;
 import org.jf.dexlib2.dexbacked.ZipDexContainer.NotAZipFileException;
@@ -86,7 +85,7 @@ public final class DexFileFactory {
 
         try {
             ZipDexContainer container = new ZipDexContainer(file, opcodes);
-            return new DexEntryFinder(file.getPath(), container).findEntry("classes.dex", true);
+            return new DexEntryFinder(file.getPath(), container).findEntry("classes.dex", true).getDexFile();
         } catch (NotAZipFileException ex) {
             // eat it and continue
         }
@@ -120,7 +119,7 @@ public final class DexFileFactory {
                     throw new UnsupportedOatVersionException(oatFile);
                 }
 
-                List<OatDexFile> oatDexFiles = oatFile.getDexFiles();
+                List<DexBackedDexFile> oatDexFiles = oatFile.getDexFiles();
 
                 if (oatDexFiles.size() == 0) {
                     throw new DexFileNotFoundException("Oat file %s contains no dex files", file.getName());
@@ -175,8 +174,11 @@ public final class DexFileFactory {
      * valid dex file
      * @throws MultipleMatchingDexEntriesException If multiple entries match the given dexEntry
      */
-    public static DexBackedDexFile loadDexEntry(@Nonnull File file, @Nonnull String dexEntry,
-                                                boolean exactMatch, @Nullable Opcodes opcodes) throws IOException {
+    public static MultiDexContainer.DexEntry<? extends DexBackedDexFile> loadDexEntry(
+            @Nonnull File file,
+            @Nonnull String dexEntry,
+            boolean exactMatch,
+            @Nullable Opcodes opcodes) throws IOException {
         if (!file.exists()) {
             throw new DexFileNotFoundException("Container file %s does not exist", file.getName());
         }
@@ -202,7 +204,7 @@ public final class DexFileFactory {
                     throw new UnsupportedOatVersionException(oatFile);
                 }
 
-                List<OatDexFile> oatDexFiles = oatFile.getDexFiles();
+                List<? extends DexFile> oatDexFiles = oatFile.getDexFiles();
 
                 if (oatDexFiles.size() == 0) {
                     throw new DexFileNotFoundException("Oat file %s contains no dex files", file.getName());
@@ -342,7 +344,8 @@ public final class DexFileFactory {
      * Performs a partial match against entry and targetEntry.
      *
      * This is considered a partial match if targetEntry is a suffix of entry, and if the suffix starts
-     * on a path "part" (ignoring the initial separator, if any). Both '/' and ':' are considered separators for this.
+     * on a path "part" (ignoring the initial separator, if any). '/' and ':' and '!' are considered separators for
+     * this.
      *
      * So entry="/blah/blah/something.dex" and targetEntry="lah/something.dex" shouldn't match, but
      * both targetEntry="blah/something.dex" and "/blah/something.dex" should match.
@@ -362,7 +365,8 @@ public final class DexFileFactory {
         char firstTargetChar = targetEntry.charAt(0);
         // This is a device path, so we should always use the linux separator '/', rather than the current platform's
         // separator
-        return firstTargetChar == ':' || firstTargetChar == '/' || precedingChar == ':' || precedingChar == '/';
+        return firstTargetChar == ':' || firstTargetChar == '/' || firstTargetChar == '!' ||
+                precedingChar == ':' || precedingChar == '/' || precedingChar == '!';
     }
 
     protected static class DexEntryFinder {
@@ -376,14 +380,15 @@ public final class DexFileFactory {
         }
 
         @Nonnull
-        public DexBackedDexFile findEntry(@Nonnull String targetEntry, boolean exactMatch) throws IOException {
+        public MultiDexContainer.DexEntry<? extends DexBackedDexFile> findEntry(
+                @Nonnull String targetEntry, boolean exactMatch) throws IOException {
             if (exactMatch) {
                 try {
-                    DexBackedDexFile dexFile = dexContainer.getEntry(targetEntry);
-                    if (dexFile == null) {
+                    MultiDexContainer.DexEntry<? extends DexBackedDexFile> entry = dexContainer.getEntry(targetEntry);
+                    if (entry == null) {
                         throw new DexFileNotFoundException("Could not find entry %s in %s.", targetEntry, filename);
                     }
-                    return dexFile;
+                    return entry;
                 } catch (NotADexFile ex) {
                     throw new UnsupportedFileTypeException("Entry %s in %s is not a dex file", targetEntry, filename);
                 }
@@ -391,26 +396,30 @@ public final class DexFileFactory {
 
             // find all full and partial matches
             List<String> fullMatches = Lists.newArrayList();
-            List<DexBackedDexFile> fullEntries = Lists.newArrayList();
+            List<MultiDexContainer.DexEntry<? extends DexBackedDexFile>> fullEntries = Lists.newArrayList();
             List<String> partialMatches = Lists.newArrayList();
-            List<DexBackedDexFile> partialEntries = Lists.newArrayList();
+            List<MultiDexContainer.DexEntry<? extends DexBackedDexFile>> partialEntries = Lists.newArrayList();
             for (String entry: dexContainer.getDexEntryNames()) {
                 if (fullEntryMatch(entry, targetEntry)) {
                     // We want to grab all full matches, regardless of whether they're actually a dex file.
                     fullMatches.add(entry);
-                    fullEntries.add(dexContainer.getEntry(entry));
+                    MultiDexContainer.DexEntry<? extends DexBackedDexFile> dexEntry = dexContainer.getEntry(entry);
+                    assert dexEntry != null;
+                    fullEntries.add(dexEntry);
                 } else if (partialEntryMatch(entry, targetEntry)) {
                     partialMatches.add(entry);
-                    partialEntries.add(dexContainer.getEntry(entry));
+                    MultiDexContainer.DexEntry<? extends DexBackedDexFile> dexEntry = dexContainer.getEntry(entry);
+                    assert dexEntry != null;
+                    partialEntries.add(dexEntry);
                 }
             }
 
             // full matches always take priority
             if (fullEntries.size() == 1) {
                 try {
-                    DexBackedDexFile dexFile = fullEntries.get(0);
-                    assert dexFile != null;
-                    return dexFile;
+                    MultiDexContainer.DexEntry<? extends DexBackedDexFile> dexEntry = fullEntries.get(0);
+                    assert dexEntry != null;
+                    return dexEntry;
                 } catch (NotADexFile ex) {
                     throw new UnsupportedFileTypeException("Entry %s in %s is not a dex file",
                             fullMatches.get(0), filename);
@@ -446,13 +455,31 @@ public final class DexFileFactory {
             this.dexFile = dexFile;
         }
 
-        @Nonnull @Override public List<String> getDexEntryNames() throws IOException {
+        @Nonnull @Override public List<String> getDexEntryNames() {
             return ImmutableList.of(entryName);
         }
 
-        @Nullable @Override public DexBackedDexFile getEntry(@Nonnull String entryName) throws IOException {
+        @Nullable @Override public DexEntry<DexBackedDexFile> getEntry(@Nonnull String entryName) {
             if (entryName.equals(this.entryName)) {
-                return dexFile;
+                return new DexEntry<DexBackedDexFile>() {
+                    @Nonnull
+                    @Override
+                    public String getEntryName() {
+                        return entryName;
+                    }
+
+                    @Nonnull
+                    @Override
+                    public DexBackedDexFile getDexFile() {
+                        return dexFile;
+                    }
+
+                    @Nonnull
+                    @Override
+                    public MultiDexContainer<? extends DexBackedDexFile> getContainer() {
+                        return SingletonMultiDexContainer.this;
+                    }
+                };
             }
             return null;
         }
@@ -473,9 +500,22 @@ public final class DexFileFactory {
 
         @Nullable @Override public byte[] getVdex() {
             if (!loadedVdex) {
-                if (vdexFile.exists()) {
+                File candidateFile = vdexFile;
+
+                if (!candidateFile.exists()) {
+                    // On api 28, for framework files, the vdex file in the architecture-specific directory is just a
+                    // symlink to a common vdex file in the framework directory. When loop-mounting a system image, that
+                    // symlink won't resolve because it uses an absolute path. As a workaround, we'll just search upward
+                    // one directory to see if it's there.
+                    File parentDirectory = candidateFile.getParentFile().getParentFile();
+                    if (parentDirectory != null) {
+                        candidateFile = new File(parentDirectory, vdexFile.getName());
+                    }
+                }
+
+                if (candidateFile.exists()) {
                     try {
-                        buf = ByteStreams.toByteArray(new FileInputStream(vdexFile));
+                        buf = ByteStreams.toByteArray(new FileInputStream(candidateFile));
                     } catch (FileNotFoundException e) {
                         buf = null;
                     } catch (IOException ex) {

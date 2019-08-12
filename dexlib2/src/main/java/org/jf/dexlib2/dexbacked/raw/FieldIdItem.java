@@ -54,13 +54,13 @@ public class FieldIdItem {
 
             @Override
             protected void annotateItem(@Nonnull AnnotatedBytes out, int itemIndex, @Nullable String itemIdentity) {
-                int classIndex = dexFile.readUshort(out.getCursor());
+                int classIndex = dexFile.getBuffer().readUshort(out.getCursor());
                 out.annotate(2, "class_idx = %s", TypeIdItem.getReferenceAnnotation(dexFile, classIndex));
 
-                int typeIndex = dexFile.readUshort(out.getCursor());
+                int typeIndex = dexFile.getBuffer().readUshort(out.getCursor());
                 out.annotate(2, "return_type_idx = %s", TypeIdItem.getReferenceAnnotation(dexFile, typeIndex));
 
-                int nameIndex = dexFile.readSmallUint(out.getCursor());
+                int nameIndex = dexFile.getBuffer().readSmallUint(out.getCursor());
                 out.annotate(4, "name_idx = %s", StringIdItem.getReferenceAnnotation(dexFile, nameIndex));
             }
         };
@@ -68,15 +68,15 @@ public class FieldIdItem {
 
     @Nonnull
     public static String asString(@Nonnull DexBackedDexFile dexFile, int fieldIndex) {
-        int fieldOffset = dexFile.getFieldIdItemOffset(fieldIndex);
-        int classIndex = dexFile.readUshort(fieldOffset + CLASS_OFFSET);
-        String classType = dexFile.getType(classIndex);
+        int fieldOffset = dexFile.getFieldSection().getOffset(fieldIndex);
+        int classIndex = dexFile.getBuffer().readUshort(fieldOffset + CLASS_OFFSET);
+        String classType = dexFile.getTypeSection().get(classIndex);
 
-        int typeIndex = dexFile.readUshort(fieldOffset + TYPE_OFFSET);
-        String fieldType = dexFile.getType(typeIndex);
+        int typeIndex = dexFile.getBuffer().readUshort(fieldOffset + TYPE_OFFSET);
+        String fieldType = dexFile.getTypeSection().get(typeIndex);
 
-        int nameIndex = dexFile.readSmallUint(fieldOffset + NAME_OFFSET);
-        String fieldName = dexFile.getString(nameIndex);
+        int nameIndex = dexFile.getBuffer().readSmallUint(fieldOffset + NAME_OFFSET);
+        String fieldName = dexFile.getStringSection().get(nameIndex);
 
         return String.format("%s->%s:%s", classType, fieldName, fieldType);
     }
@@ -92,7 +92,7 @@ public class FieldIdItem {
         return String.format("field_id_item[%d]", fieldIndex);
     }
 
-    public static String[] getFields(@Nonnull RawDexFile dexFile) {
+    public static String[] getFields(@Nonnull DexBackedDexFile dexFile) {
         MapItem mapItem = dexFile.getMapItemForSection(ItemType.FIELD_ID_ITEM);
         if (mapItem == null) {
             return new String[0];

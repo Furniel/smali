@@ -42,12 +42,12 @@ public class DexBackedAnnotationElement extends BaseAnnotationElement {
     public final int nameIndex;
     @Nonnull public final EncodedValue value;
 
-    public DexBackedAnnotationElement(@Nonnull DexReader reader) {
-        this.dexFile = reader.dexBuf;
+    public DexBackedAnnotationElement(@Nonnull DexBackedDexFile dexFile, @Nonnull DexReader reader) {
+        this.dexFile = dexFile;
         this.nameIndex = reader.readSmallUleb128();
-        this.value = DexBackedEncodedValue.readFrom(reader);
+        this.value = DexBackedEncodedValue.readFrom(dexFile, reader);
     }
 
-    @Nonnull @Override public String getName() { return dexFile.getString(nameIndex); }
+    @Nonnull @Override public String getName() { return dexFile.getStringSection().get(nameIndex); }
     @Nonnull @Override public EncodedValue getValue() { return value; }
 }

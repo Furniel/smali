@@ -48,26 +48,26 @@ public class DexBackedAnnotation extends BaseAnnotation {
                                int annotationOffset) {
         this.dexFile = dexFile;
 
-        DexReader reader = dexFile.readerAt(annotationOffset);
+        DexReader reader = dexFile.getDataBuffer().readerAt(annotationOffset);
         this.visibility = reader.readUbyte();
         this.typeIndex = reader.readSmallUleb128();
         this.elementsOffset = reader.getOffset();
     }
 
     @Override public int getVisibility() { return visibility; }
-    @Nonnull @Override public String getType() { return dexFile.getType(typeIndex); }
+    @Nonnull @Override public String getType() { return dexFile.getTypeSection().get(typeIndex); }
 
     @Nonnull
     @Override
     public Set<? extends DexBackedAnnotationElement> getElements() {
-        DexReader reader = dexFile.readerAt(elementsOffset);
+        DexReader reader = dexFile.getDataBuffer().readerAt(elementsOffset);
         final int size = reader.readSmallUleb128();
 
-        return new VariableSizeSet<DexBackedAnnotationElement>(dexFile, reader.getOffset(), size) {
+        return new VariableSizeSet<DexBackedAnnotationElement>(dexFile.getDataBuffer(), reader.getOffset(), size) {
             @Nonnull
             @Override
             protected DexBackedAnnotationElement readNextItem(@Nonnull DexReader reader, int index) {
-                return new DexBackedAnnotationElement(reader);
+                return new DexBackedAnnotationElement(dexFile, reader);
             }
         };
     }

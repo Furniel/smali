@@ -52,12 +52,12 @@ public class AnnotationItem {
 
             @Override
             protected void annotateItem(@Nonnull AnnotatedBytes out, int itemIndex, @Nullable String itemIdentity) {
-                int visibility = dexFile.readUbyte(out.getCursor());
+                int visibility = dexFile.getBuffer().readUbyte(out.getCursor());
                 out.annotate(1, "visibility = %d: %s", visibility, getAnnotationVisibility(visibility));
 
-                DexReader reader = dexFile.readerAt(out.getCursor());
+                DexReader reader = dexFile.getBuffer().readerAt(out.getCursor());
 
-                EncodedValue.annotateEncodedAnnotation(out, reader);
+                EncodedValue.annotateEncodedAnnotation(dexFile, out, reader);
             }
         };
     }
@@ -77,10 +77,10 @@ public class AnnotationItem {
 
     public static String getReferenceAnnotation(@Nonnull DexBackedDexFile dexFile, int annotationItemOffset) {
         try {
-            DexReader reader = dexFile.readerAt(annotationItemOffset);
+            DexReader reader = dexFile.getDataBuffer().readerAt(annotationItemOffset);
             reader.readUbyte();
             int typeIndex = reader.readSmallUleb128();
-            String annotationType = dexFile.getType(typeIndex);
+            String annotationType = dexFile.getTypeSection().get(typeIndex);
             return String.format("annotation_item[0x%x]: %s", annotationItemOffset, annotationType);
         } catch (Exception ex) {
             ex.printStackTrace(System.err);

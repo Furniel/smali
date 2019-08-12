@@ -161,7 +161,7 @@ public class DisassembleCommand extends DexInputCommand {
         String input = inputList.get(0);
         loadDexFile(input);
 
-        if (showDeodexWarning() && dexFile.hasOdexOpcodes()) {
+        if (showDeodexWarning() && dexFile.supportsOptimizedOpcodes()) {
             StringWrapper.printWrappedString(System.err,
                     "Warning: You are disassembling an odex/oat file without deodexing it. You won't be able to " +
                             "re-assemble the results unless you deodex it. See \"baksmali help deodex\"",
@@ -207,7 +207,7 @@ public class DisassembleCommand extends DexInputCommand {
         if (needsClassPath()) {
             try {
                 options.classPath = analysisArguments.loadClassPathForDexFile(
-                        inputFile.getAbsoluteFile().getParentFile(), dexFile, shouldCheckPackagePrivateAccess());
+                        inputFile.getAbsoluteFile().getParentFile(), dexEntry, shouldCheckPackagePrivateAccess());
             } catch (Exception ex) {
                 System.err.println("\n\nError occurred while loading class path files. Aborting.");
                 ex.printStackTrace(System.err);

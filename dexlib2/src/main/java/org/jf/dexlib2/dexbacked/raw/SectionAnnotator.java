@@ -32,9 +32,10 @@
 package org.jf.dexlib2.dexbacked.raw;
 
 import com.google.common.collect.Maps;
+import org.jf.dexlib2.dexbacked.DexBackedDexFile;
 import org.jf.dexlib2.dexbacked.raw.util.DexAnnotator;
-import org.jf.dexlib2.util.AnnotatedBytes;
 import org.jf.dexlib2.util.AlignmentUtils;
+import org.jf.dexlib2.util.AnnotatedBytes;
 
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
@@ -42,19 +43,24 @@ import java.util.Map;
 
 public abstract class SectionAnnotator {
     @Nonnull public final DexAnnotator annotator;
-    @Nonnull public final RawDexFile dexFile;
+    @Nonnull public final DexBackedDexFile dexFile;
     public final int itemType;
     public final int sectionOffset;
     public final int itemCount;
 
-    private Map<Integer, String> itemIdentities = Maps.newHashMap();
+    protected Map<Integer, String> itemIdentities = Maps.newHashMap();
 
     public SectionAnnotator(@Nonnull DexAnnotator annotator, @Nonnull MapItem mapItem) {
         this.annotator = annotator;
         this.dexFile = annotator.dexFile;
         this.itemType = mapItem.getType();
 
-        this.sectionOffset = mapItem.getOffset();
+        if (mapItem.getType() >= ItemType.MAP_LIST) {
+            this.sectionOffset = mapItem.getOffset() + dexFile.getBaseDataOffset();
+        } else {
+            this.sectionOffset = mapItem.getOffset();
+        }
+
         this.itemCount = mapItem.getItemCount();
     }
 
@@ -71,9 +77,12 @@ public abstract class SectionAnnotator {
         annotateSectionInner(out, itemCount);
     }
 
+    protected int getItemOffset(int itemIndex, int currentOffset) {
+        return AlignmentUtils.alignOffset(currentOffset, getItemAlignment());
+    }
+
     protected void annotateSectionInner(@Nonnull AnnotatedBytes out, int itemCount) {
         String itemName = getItemName();
-        int itemAlignment = getItemAlignment();
         if (itemCount > 0) {
             out.annotate(0, "");
             out.annotate(0, "-----------------------------");
@@ -82,7 +91,7 @@ public abstract class SectionAnnotator {
             out.annotate(0, "");
 
             for (int i=0; i<itemCount; i++) {
-                out.moveTo(AlignmentUtils.alignOffset(out.getCursor(), itemAlignment));
+                out.moveTo(getItemOffset(i, out.getCursor()));
 
                 String itemIdentity = getItemIdentity(out.getCursor());
                 if (itemIdentity != null) {
@@ -102,7 +111,7 @@ public abstract class SectionAnnotator {
     }
 
     public void setItemIdentity(int itemOffset, String identity) {
-        itemIdentities.put(itemOffset, identity);
+        itemIdentities.put(itemOffset + dexFile.getBaseDataOffset(), identity);
     }
 
     public int getItemAlignment() {

@@ -52,40 +52,42 @@ public class DexBackedTryBlock extends BaseTryBlock<DexBackedExceptionHandler> {
     }
 
     @Override public int getStartCodeAddress() {
-        return dexFile.readSmallUint(tryItemOffset + CodeItem.TryItem.START_ADDRESS_OFFSET);
+        return dexFile.getDataBuffer().readSmallUint(tryItemOffset + CodeItem.TryItem.START_ADDRESS_OFFSET);
     }
 
     @Override public int getCodeUnitCount() {
-        return dexFile.readUshort(tryItemOffset + CodeItem.TryItem.CODE_UNIT_COUNT_OFFSET);
+        return dexFile.getDataBuffer().readUshort(tryItemOffset + CodeItem.TryItem.CODE_UNIT_COUNT_OFFSET);
     }
 
     @Nonnull
     @Override
     public List<? extends DexBackedExceptionHandler> getExceptionHandlers() {
-        DexReader reader = dexFile.readerAt(
-                handlersStartOffset + dexFile.readUshort(tryItemOffset + CodeItem.TryItem.HANDLER_OFFSET));
+        DexReader reader = dexFile.getDataBuffer().readerAt(
+                handlersStartOffset + dexFile.getDataBuffer().readUshort(tryItemOffset + CodeItem.TryItem.HANDLER_OFFSET));
         final int encodedSize = reader.readSleb128();
 
         if (encodedSize > 0) {
             //no catch-all
-            return new VariableSizeList<DexBackedTypedExceptionHandler>(dexFile, reader.getOffset(), encodedSize) {
+            return new VariableSizeList<DexBackedTypedExceptionHandler>(
+                    dexFile.getDataBuffer(), reader.getOffset(), encodedSize) {
                 @Nonnull
                 @Override
                 protected DexBackedTypedExceptionHandler readNextItem(@Nonnull DexReader reader, int index) {
-                    return new DexBackedTypedExceptionHandler(reader);
+                    return new DexBackedTypedExceptionHandler(dexFile, reader);
                 }
             };
         } else {
             //with catch-all
             final int sizeWithCatchAll = (-1 * encodedSize) + 1;
-            return new VariableSizeList<DexBackedExceptionHandler>(dexFile, reader.getOffset(), sizeWithCatchAll) {
+            return new VariableSizeList<DexBackedExceptionHandler>(
+                    dexFile.getDataBuffer(), reader.getOffset(), sizeWithCatchAll) {
                 @Nonnull
                 @Override
                 protected DexBackedExceptionHandler readNextItem(@Nonnull DexReader dexReader, int index) {
                     if (index == sizeWithCatchAll-1) {
                         return new DexBackedCatchAllExceptionHandler(dexReader);
                     } else {
-                        return new DexBackedTypedExceptionHandler(dexReader);
+                        return new DexBackedTypedExceptionHandler(dexFile, dexReader);
                     }
                 }
             };

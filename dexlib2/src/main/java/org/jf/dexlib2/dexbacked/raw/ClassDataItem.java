@@ -33,6 +33,7 @@ package org.jf.dexlib2.dexbacked.raw;
 
 import com.google.common.base.Joiner;
 import org.jf.dexlib2.AccessFlags;
+import org.jf.dexlib2.dexbacked.DexBackedDexFile;
 import org.jf.dexlib2.dexbacked.DexReader;
 import org.jf.dexlib2.dexbacked.raw.util.DexAnnotator;
 import org.jf.dexlib2.util.AnnotatedBytes;
@@ -51,14 +52,13 @@ public class ClassDataItem {
                 super.annotateSection(out);
             }
 
-
             @Nonnull @Override public String getItemName() {
                 return "class_data_item";
             }
 
             @Override
             protected void annotateItem(@Nonnull AnnotatedBytes out, int itemIndex, @Nullable String itemIdentity) {
-                DexReader reader = dexFile.readerAt(out.getCursor());
+                DexReader reader = dexFile.getBuffer().readerAt(out.getCursor());
 
                 int staticFieldsSize = reader.readSmallUleb128();
                 out.annotateTo(reader.getOffset(), "static_fields_size = %d", staticFieldsSize);
@@ -125,7 +125,7 @@ public class ClassDataItem {
                 }
             }
 
-            private int annotateEncodedField(@Nonnull AnnotatedBytes out, @Nonnull RawDexFile dexFile,
+            private int annotateEncodedField(@Nonnull AnnotatedBytes out, @Nonnull DexBackedDexFile dexFile,
                                              @Nonnull DexReader reader, int previousIndex) {
                 // large values may be used for the index delta, which cause the cumulative index to overflow upon
                 // addition, effectively allowing out of order entries.
@@ -141,7 +141,7 @@ public class ClassDataItem {
                 return fieldIndex;
             }
 
-            private int annotateEncodedMethod(@Nonnull AnnotatedBytes out, @Nonnull RawDexFile dexFile,
+            private int annotateEncodedMethod(@Nonnull AnnotatedBytes out, @Nonnull DexBackedDexFile dexFile,
                                               @Nonnull DexReader reader, int previousIndex) {
                 // large values may be used for the index delta, which cause the cumulative index to overflow upon
                 // addition, effectively allowing out of order entries.

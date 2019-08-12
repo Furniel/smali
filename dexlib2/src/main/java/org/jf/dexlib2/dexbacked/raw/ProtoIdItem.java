@@ -54,13 +54,13 @@ public class ProtoIdItem {
 
             @Override
             protected void annotateItem(@Nonnull AnnotatedBytes out, int itemIndex, @Nullable String itemIdentity) {
-                int shortyIndex = dexFile.readSmallUint(out.getCursor());
+                int shortyIndex = dexFile.getBuffer().readSmallUint(out.getCursor());
                 out.annotate(4, "shorty_idx = %s", StringIdItem.getReferenceAnnotation(dexFile, shortyIndex));
 
-                int returnTypeIndex = dexFile.readSmallUint(out.getCursor());
+                int returnTypeIndex = dexFile.getBuffer().readSmallUint(out.getCursor());
                 out.annotate(4, "return_type_idx = %s", TypeIdItem.getReferenceAnnotation(dexFile, returnTypeIndex));
 
-                int parametersOffset = dexFile.readSmallUint(out.getCursor());
+                int parametersOffset = dexFile.getBuffer().readSmallUint(out.getCursor());
                 out.annotate(4, "parameters_off = %s", TypeListItem.getReferenceAnnotation(dexFile, parametersOffset));
             }
         };
@@ -79,23 +79,23 @@ public class ProtoIdItem {
 
     @Nonnull
     public static String asString(@Nonnull DexBackedDexFile dexFile, int protoIndex) {
-        int offset = dexFile.getProtoIdItemOffset(protoIndex);
+        int offset = dexFile.getProtoSection().getOffset(protoIndex);
 
         StringBuilder sb = new StringBuilder();
         sb.append("(");
 
-        int parametersOffset = dexFile.readSmallUint(offset + PARAMETERS_OFFSET);
+        int parametersOffset = dexFile.getBuffer().readSmallUint(offset + PARAMETERS_OFFSET);
         sb.append(TypeListItem.asString(dexFile, parametersOffset));
         sb.append(")");
 
-        int returnTypeIndex = dexFile.readSmallUint(offset + RETURN_TYPE_OFFSET);
-        String returnType = dexFile.getType(returnTypeIndex);
+        int returnTypeIndex = dexFile.getBuffer().readSmallUint(offset + RETURN_TYPE_OFFSET);
+        String returnType = dexFile.getTypeSection().get(returnTypeIndex);
         sb.append(returnType);
 
         return sb.toString();
     }
 
-    public static String[] getProtos(@Nonnull RawDexFile dexFile) {
+    public static String[] getProtos(@Nonnull DexBackedDexFile dexFile) {
         MapItem mapItem = dexFile.getMapItemForSection(ItemType.PROTO_ID_ITEM);
         if (mapItem == null) {
             return new String[0];

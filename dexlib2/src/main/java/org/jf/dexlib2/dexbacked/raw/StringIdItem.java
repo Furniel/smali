@@ -51,9 +51,9 @@ public class StringIdItem {
 
             @Override
             public void annotateItem(@Nonnull AnnotatedBytes out, int itemIndex, @Nullable String itemIdentity) {
-                int stringDataOffset = dexFile.readSmallUint(out.getCursor());
+                int stringDataOffset = dexFile.getBuffer().readSmallUint(out.getCursor());
                 try {
-                    String stringValue = dexFile.getString(itemIndex);
+                    String stringValue = dexFile.getStringSection().get(itemIndex);
                     out.annotate(4, "string_data_item[0x%x]: \"%s\"", stringDataOffset,
                             StringUtils.escapeString(stringValue));
                     return;
@@ -71,12 +71,11 @@ public class StringIdItem {
     @Nonnull
     public static String getReferenceAnnotation(@Nonnull DexBackedDexFile dexFile, int stringIndex) {
         return getReferenceAnnotation(dexFile, stringIndex, false);
-
     }
 
     public static String getReferenceAnnotation(@Nonnull DexBackedDexFile dexFile, int stringIndex, boolean quote) {
         try {
-            String string = dexFile.getString(stringIndex);
+            String string = dexFile.getStringSection().get(stringIndex);
             if (quote) {
                 string = String.format("\"%s\"", StringUtils.escapeString(string));
             }
@@ -91,7 +90,6 @@ public class StringIdItem {
     @Nonnull
     public static String getOptionalReferenceAnnotation(@Nonnull DexBackedDexFile dexFile, int stringIndex) {
         return getOptionalReferenceAnnotation(dexFile, stringIndex, false);
-
     }
 
     public static String getOptionalReferenceAnnotation(@Nonnull DexBackedDexFile dexFile, int stringIndex,
@@ -100,19 +98,5 @@ public class StringIdItem {
             return "string_id_item[NO_INDEX]";
         }
         return getReferenceAnnotation(dexFile, stringIndex, quote);
-    }
-
-    public static String[] getStrings(@Nonnull RawDexFile dexFile) {
-        MapItem mapItem = dexFile.getMapItemForSection(ItemType.STRING_ID_ITEM);
-        if (mapItem == null) {
-            return new String[0];
-        }
-
-        int stringCount = mapItem.getItemCount();
-        String[] ret = new String[stringCount];
-        for (int i=0; i<stringCount; i++) {
-            ret[i] = dexFile.getString(i);
-        }
-        return ret;
     }
 }

@@ -41,12 +41,12 @@ public class DexBackedTypeEncodedValue extends BaseTypeEncodedValue {
     @Nonnull public final DexBackedDexFile dexFile;
     private final int typeIndex;
 
-    public DexBackedTypeEncodedValue(@Nonnull DexReader reader, int valueArg) {
-        this.dexFile = reader.dexBuf;
+    public DexBackedTypeEncodedValue(@Nonnull DexBackedDexFile dexFile, @Nonnull DexReader reader, int valueArg) {
+        this.dexFile = dexFile;
         typeIndex = reader.readSizedSmallUint(valueArg + 1);
     }
 
     @Nonnull @Override public String getValue() {
-        return dexFile.getType(typeIndex);
+        return dexFile.getTypeSection().get(typeIndex);
     }
 }
