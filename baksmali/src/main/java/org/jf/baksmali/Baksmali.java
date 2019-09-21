@@ -276,7 +276,7 @@ public class Baksmali {
             try (ByteArrayInputStream bis = new ByteArrayInputStream(arr);
                  InputStreamReader reader = new InputStreamReader(bis, "UTF-8"))
             {
-                LexerErrorInterface lexer = new smaliFlexLexer(reader);
+                LexerErrorInterface lexer = new smaliFlexLexer(reader, options.apiLevel);
                 CommonTokenStream tokens = new CommonTokenStream((TokenSource) lexer);
 
 
