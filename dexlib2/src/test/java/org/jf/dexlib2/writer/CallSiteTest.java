@@ -70,7 +70,7 @@ public class CallSiteTest {
                 null, null,
                 Lists.<Method>newArrayList(
                         new ImmutableMethod("Lcls1", "method1",
-                                ImmutableList.of(), "V", AccessFlags.PUBLIC.getValue(), null,
+                                ImmutableList.of(), "V", AccessFlags.PUBLIC.getValue(), null, null,
                                 new ImmutableMethodImplementation(10, ImmutableList.of(
                                         new ImmutableInstruction35c(Opcode.INVOKE_CUSTOM, 0, 0, 0, 0, 0, 0,
                                                 new ImmutableCallSiteReference("call_site_1",
@@ -109,7 +109,7 @@ public class CallSiteTest {
                 callSite));
 
         BuilderMethod method = dexBuilder.internMethod("Lcls1", "method1", null, "V", 0, ImmutableSet.of(),
-                methodImplementationBuilder.getMethodImplementation());
+                ImmutableSet.of(), methodImplementationBuilder.getMethodImplementation());
         dexBuilder.internClassDef("Lcls1;", AccessFlags.PUBLIC.getValue(), "Ljava/lang/Object;", null, null,
                 ImmutableSet.of(), null,
                 ImmutableList.of(method));

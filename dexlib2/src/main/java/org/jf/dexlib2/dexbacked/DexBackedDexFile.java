@@ -50,6 +50,8 @@ import java.util.AbstractList;
 import java.util.List;
 import java.util.Set;
 
+import static org.jf.dexlib2.writer.DexWriter.NO_OFFSET;
+
 public class DexBackedDexFile implements DexFile {
 
     private final DexBuffer dexBuffer;
@@ -70,6 +72,7 @@ public class DexBackedDexFile implements DexFile {
     private final int classCount;
     private final int classStartOffset;
     private final int mapOffset;
+    private final int hiddenApiRestrictionsOffset;
 
     protected DexBackedDexFile(@Nullable Opcodes opcodes, @Nonnull byte[] buf, int offset, boolean verifyMagic) {
         dexBuffer = new DexBuffer(buf, offset);
@@ -96,6 +99,49 @@ public class DexBackedDexFile implements DexFile {
         classCount = dexBuffer.readSmallUint(HeaderItem.CLASS_COUNT_OFFSET);
         classStartOffset = dexBuffer.readSmallUint(HeaderItem.CLASS_START_OFFSET);
         mapOffset = dexBuffer.readSmallUint(HeaderItem.MAP_OFFSET);
+
+        MapItem mapItem = getMapItemForSection(ItemType.HIDDENAPI_CLASS_DATA_ITEM);
+        if (mapItem != null) {
+            hiddenApiRestrictionsOffset = mapItem.getOffset();
+        } else {
+            hiddenApiRestrictionsOffset = NO_OFFSET;
+        }
+    }
+
+    protected DexBackedDexFile(@Nullable Opcodes opcodes, @Nonnull DexBuffer dexBuffer, @Nonnull DexBuffer dataBuffer, int offset, boolean verifyMagic) {
+        this.dexBuffer = dexBuffer;
+        this.dataBuffer = dataBuffer;
+
+        byte[] headerBuf = dexBuffer.readByteRange(offset, HeaderItem.ITEM_SIZE);
+
+        int dexVersion = getVersion(headerBuf, offset, verifyMagic);
+
+        if (opcodes == null) {
+            this.opcodes = getDefaultOpcodes(dexVersion);
+        } else {
+            this.opcodes = opcodes;
+        }
+
+        stringCount = dexBuffer.readSmallUint(HeaderItem.STRING_COUNT_OFFSET);
+        stringStartOffset = dexBuffer.readSmallUint(HeaderItem.STRING_START_OFFSET);
+        typeCount = dexBuffer.readSmallUint(HeaderItem.TYPE_COUNT_OFFSET);
+        typeStartOffset = dexBuffer.readSmallUint(HeaderItem.TYPE_START_OFFSET);
+        protoCount = dexBuffer.readSmallUint(HeaderItem.PROTO_COUNT_OFFSET);
+        protoStartOffset = dexBuffer.readSmallUint(HeaderItem.PROTO_START_OFFSET);
+        fieldCount = dexBuffer.readSmallUint(HeaderItem.FIELD_COUNT_OFFSET);
+        fieldStartOffset = dexBuffer.readSmallUint(HeaderItem.FIELD_START_OFFSET);
+        methodCount = dexBuffer.readSmallUint(HeaderItem.METHOD_COUNT_OFFSET);
+        methodStartOffset = dexBuffer.readSmallUint(HeaderItem.METHOD_START_OFFSET);
+        classCount = dexBuffer.readSmallUint(HeaderItem.CLASS_COUNT_OFFSET);
+        classStartOffset = dexBuffer.readSmallUint(HeaderItem.CLASS_START_OFFSET);
+        mapOffset = dexBuffer.readSmallUint(HeaderItem.MAP_OFFSET);
+
+        MapItem mapItem = getMapItemForSection(ItemType.HIDDENAPI_CLASS_DATA_ITEM);
+        if (mapItem != null) {
+            hiddenApiRestrictionsOffset = mapItem.getOffset();
+        } else {
+            hiddenApiRestrictionsOffset = NO_OFFSET;
+        }
     }
 
     /**
@@ -415,7 +461,8 @@ public class DexBackedDexFile implements DexFile {
     private IndexedSection<DexBackedClassDef> classSection = new IndexedSection<DexBackedClassDef>() {
         @Override
         public DexBackedClassDef get(int index) {
-            return new DexBackedClassDef(DexBackedDexFile.this, getOffset(index));
+            return new DexBackedClassDef(DexBackedDexFile.this, getOffset(index),
+                    readHiddenApiRestrictionsOffset(index));
         }
 
         @Override
@@ -503,6 +550,22 @@ public class DexBackedDexFile implements DexFile {
     protected DexBackedMethodImplementation createMethodImplementation(
             @Nonnull DexBackedDexFile dexFile, @Nonnull DexBackedMethod method, int codeOffset) {
         return new DexBackedMethodImplementation(dexFile, method, codeOffset);
+    }
+
+    private int readHiddenApiRestrictionsOffset(int classIndex) {
+        if (hiddenApiRestrictionsOffset == NO_OFFSET) {
+            return NO_OFFSET;
+        }
+
+        int offset = dexBuffer.readInt(
+                hiddenApiRestrictionsOffset +
+                        HiddenApiClassDataItem.OFFSETS_LIST_OFFSET +
+                        classIndex * HiddenApiClassDataItem.OFFSET_ITEM_SIZE);
+        if (offset == NO_OFFSET) {
+            return NO_OFFSET;
+        }
+
+        return hiddenApiRestrictionsOffset + offset;
     }
 
     public static abstract class OptionalIndexedSection<T> extends IndexedSection<T> {

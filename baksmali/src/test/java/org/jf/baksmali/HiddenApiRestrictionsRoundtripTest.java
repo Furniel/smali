@@ -1,5 +1,5 @@
 /*
- * Copyright 2014, Google Inc.
+ * Copyright 2015, Google Inc.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -29,43 +29,15 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-package org.jf.dexlib2.rewriter;
+package org.jf.baksmali;
 
-import javax.annotation.Nonnull;
+import org.junit.Test;
 
-public class TypeRewriter implements Rewriter<String> {
-    @Nonnull @Override public String rewrite(@Nonnull String value) {
-        if (value.length() > 0 && value.charAt(0) == '[') {
-            int dimensions = 0;
-            while (value.charAt(dimensions) == '[') {
-                dimensions++;
-            }
-
-            String unwrappedType = value.substring(dimensions);
-            String rewrittenType = rewriteUnwrappedType(unwrappedType);
-
-            // instance equality, to avoid a value comparison in the common case of the type being unmodified
-            if (unwrappedType != rewrittenType) {
-                return new StringBuilder(dimensions + rewrittenType.length())
-                        .append(value, 0, dimensions).append(rewrittenType).toString();
-            }
-            return value;
-        } else {
-            return rewriteUnwrappedType(value);
-        }
-    }
-
-    /**
-     * This is called by the default rewrite implementation with the unwrapped type.
-     *
-     * <p>For array types, the unwrapped type is the type with the array specifiers removed. And there is no difference
-     * for non-array types.
-     *
-     * @param value The unwrapped type
-     * @return The modified version of the unwrapped type. This will be re-array-ified if the original wrapped type was
-     * an array.
-     */
-    @Nonnull protected String rewriteUnwrappedType(@Nonnull String value) {
-        return value;
+public class HiddenApiRestrictionsRoundtripTest extends RoundtripTest {
+    @Test
+    public void testHiddenApiRestrictions() {
+        BaksmaliOptions options = new BaksmaliOptions();
+        options.apiLevel = 29;
+        runTest("HiddenApiRestrictions", options);
     }
 }
