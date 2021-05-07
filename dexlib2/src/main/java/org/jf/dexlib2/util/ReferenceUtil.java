@@ -32,6 +32,7 @@
 package org.jf.dexlib2.util;
 
 import org.jf.dexlib2.MethodHandleType;
+import org.jf.dexlib2.formatter.DexFormatter;
 import org.jf.dexlib2.iface.reference.*;
 import org.jf.dexlib2.iface.value.EncodedValue;
 import org.jf.util.StringUtils;
@@ -42,6 +43,12 @@ import java.io.IOException;
 import java.io.StringWriter;
 import java.io.Writer;
 
+/**
+ * Some utilities for generating human-readable strings for the various types of references.
+ *
+ * @deprecated use {@link DexFormatter} instead.
+ */
+@Deprecated
 public final class ReferenceUtil {
     public static String getMethodDescriptor(MethodReference methodReference) {
         return getMethodDescriptor(methodReference, false);

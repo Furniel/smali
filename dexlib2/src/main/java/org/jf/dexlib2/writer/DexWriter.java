@@ -42,6 +42,7 @@ import org.jf.dexlib2.base.BaseAnnotationElement;
 import org.jf.dexlib2.builder.MutableMethodImplementation;
 import org.jf.dexlib2.builder.instruction.BuilderInstruction31c;
 import org.jf.dexlib2.dexbacked.raw.*;
+import org.jf.dexlib2.formatter.DexFormatter;
 import org.jf.dexlib2.iface.Annotation;
 import org.jf.dexlib2.iface.ExceptionHandler;
 import org.jf.dexlib2.iface.TryBlock;
@@ -55,7 +56,6 @@ import org.jf.dexlib2.iface.instruction.formats.*;
 import org.jf.dexlib2.iface.reference.*;
 import org.jf.dexlib2.util.InstructionUtil;
 import org.jf.dexlib2.util.MethodUtil;
-import org.jf.dexlib2.util.ReferenceUtil;
 import org.jf.dexlib2.writer.io.DeferredOutputStream;
 import org.jf.dexlib2.writer.io.DeferredOutputStreamFactory;
 import org.jf.dexlib2.writer.io.DexDataStore;
@@ -69,6 +69,7 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.nio.Buffer;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.security.MessageDigest;
@@ -248,7 +249,7 @@ public abstract class DexWriter<
     public List<String> getMethodReferences() {
         List<String> methodReferences = Lists.newArrayList();
         for (Entry<? extends MethodRefKey, Integer> methodReference: methodSection.getItems()) {
-            methodReferences.add(ReferenceUtil.getMethodDescriptor(methodReference.getKey()));
+            methodReferences.add(DexFormatter.INSTANCE.getMethodDescriptor(methodReference.getKey()));
         }
         return methodReferences;
     }
@@ -257,7 +258,7 @@ public abstract class DexWriter<
     public List<String> getFieldReferences() {
         List<String> fieldReferences = Lists.newArrayList();
         for (Entry<? extends FieldRefKey, Integer> fieldReference: fieldSection.getItems()) {
-            fieldReferences.add(ReferenceUtil.getFieldDescriptor(fieldReference.getKey()));
+            fieldReferences.add(DexFormatter.INSTANCE.getFieldDescriptor(fieldReference.getKey()));
         }
         return fieldReferences;
     }
@@ -916,7 +917,7 @@ public abstract class DexWriter<
                 tempBuffer.order(ByteOrder.LITTLE_ENDIAN);
             }
 
-            tempBuffer.clear();
+            ((Buffer) tempBuffer).clear();
 
             int fieldAnnotations = 0;
             int methodAnnotations = 0;

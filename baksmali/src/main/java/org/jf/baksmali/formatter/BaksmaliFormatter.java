@@ -1,18 +1,18 @@
 /*
- * Copyright 2013, Google Inc.
+ * Copyright 2021, Google Inc.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are
  * met:
  *
- *     * Redistributions of source code must retain the above copyright
+ * Redistributions of source code must retain the above copyright
  * notice, this list of conditions and the following disclaimer.
- *     * Redistributions in binary form must reproduce the above
+ * Redistributions in binary form must reproduce the above
  * copyright notice, this list of conditions and the following disclaimer
  * in the documentation and/or other materials provided with the
  * distribution.
- *     * Neither the name of Google Inc. nor the names of its
+ * Neither the name of Google Inc. nor the names of its
  * contributors may be used to endorse or promote products derived from
  * this software without specific prior written permission.
  *
@@ -29,23 +29,27 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-package org.jf.util;
+package org.jf.baksmali.formatter;
 
-import junit.framework.Assert;
-import org.junit.Test;
+import org.jf.dexlib2.formatter.DexFormatter;
 
-import java.io.IOException;
-import java.io.StringWriter;
+import javax.annotation.Nullable;
+import java.io.Writer;
 
-public class IndentingWriterTest {
-    @Test
-    public void testPrintSignedLongAsDec() throws IOException {
-        StringWriter stringWriter = new StringWriter();
-        IndentingWriter writer = new IndentingWriter(stringWriter);
+public class BaksmaliFormatter extends DexFormatter {
 
-        writer.printUnsignedIntAsDec(-1);
-        writer.close();
+    @Nullable private final String classContext;
 
-        Assert.assertEquals("4294967295", stringWriter.toString());
+    public BaksmaliFormatter() {
+        this(null);
+    }
+
+    public BaksmaliFormatter(@Nullable String classContext) {
+        this.classContext = classContext;
+    }
+
+    @Override
+    public BaksmaliWriter getWriter(Writer writer) {
+        return new BaksmaliWriter(writer, classContext);
     }
 }

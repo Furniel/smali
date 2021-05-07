@@ -35,6 +35,7 @@ import org.antlr.runtime.TokenSource;
 import org.antlr.runtime.tree.CommonTree;
 import org.antlr.runtime.tree.CommonTreeNodeStream;
 import org.jf.baksmali.Adaptors.ClassDefinition;
+import org.jf.baksmali.formatter.BaksmaliWriter;
 import org.jf.dexlib2.Opcodes;
 import org.jf.dexlib2.iface.ClassDef;
 import org.jf.dexlib2.iface.DexFile;
@@ -63,6 +64,7 @@ public class Baksmali {
 
     public static boolean disassembleDexFile(DexFile dexFile, File outputDir, int jobs, final BaksmaliOptions options,
                                              @Nullable List<String> classes) {
+
         //sort the classes, so that if we're on a case-insensitive file system and need to handle classes with file
         //name collisions, then we'll use the same name for each class, if the dex file goes through multiple
         //baksmali/smali cycles for some reason. If a class with a colliding name is added or removed, the filenames
@@ -79,13 +81,12 @@ public class Baksmali {
             classSet = new HashSet<String>(classes);
         }
 
-        for (final ClassDef classDef : classDefs) {
+        for (final ClassDef classDef: classDefs) {
             if (classSet != null && !classSet.contains(classDef.getType())) {
                 continue;
             }
             tasks.add(executor.submit(new Callable<Boolean>() {
-                @Override
-                public Boolean call() throws Exception {
+                @Override public Boolean call() throws Exception {
                     return disassembleClass(classDef, fileNameHandler, options);
                 }
             }));
@@ -93,8 +94,8 @@ public class Baksmali {
 
         boolean errorOccurred = false;
         try {
-            for (Future<Boolean> task : tasks) {
-                while (true) {
+            for (Future<Boolean> task: tasks) {
+                while(true) {
                     try {
                         if (!task.get()) {
                             errorOccurred = true;
@@ -126,19 +127,27 @@ public class Baksmali {
 
         //validate that the descriptor is formatted like we expect
         if (classDescriptor.charAt(0) != 'L' ||
-                classDescriptor.charAt(classDescriptor.length() - 1) != ';') {
+                classDescriptor.charAt(classDescriptor.length()-1) != ';') {
             System.err.println("Unrecognized class descriptor - " + classDescriptor + " - skipping class");
             return false;
         }
 
-        File smaliFile = fileNameHandler.getUniqueFilenameForClass(classDescriptor);
+        File smaliFile = null;
+        try {
+            smaliFile = fileNameHandler.getUniqueFilenameForClass(classDescriptor);
+        } catch (IOException ex) {
+            System.err.println("\n\nError occurred while creating file for class " + classDescriptor);
+            ex.printStackTrace();
+            return false;
+        }
 
         //create and initialize the top level string template
         ClassDefinition classDefinition = new ClassDefinition(options, classDef);
 
         //write the disassembly
-        Writer writer = null;
-        try {
+        BaksmaliWriter writer = null;
+        try
+        {
             File smaliParent = smaliFile.getParentFile();
             if (!smaliParent.exists()) {
                 if (!smaliParent.mkdirs()) {
@@ -150,7 +159,7 @@ public class Baksmali {
                 }
             }
 
-            if (!smaliFile.exists()) {
+            if (!smaliFile.exists()){
                 if (!smaliFile.createNewFile()) {
                     System.err.println("Unable to create file " + smaliFile.toString() + " - skipping class");
                     return false;
@@ -160,16 +169,19 @@ public class Baksmali {
             BufferedWriter bufWriter = new BufferedWriter(new OutputStreamWriter(
                     new FileOutputStream(smaliFile), "UTF8"));
 
-            writer = new IndentingWriter(bufWriter);
-            classDefinition.writeTo((IndentingWriter) writer);
-
+            writer = new BaksmaliWriter(
+                    bufWriter,
+                    options.implicitReferences ? classDef.getType() : null);
+            classDefinition.writeTo(writer);
         } catch (Exception ex) {
             System.err.println("\n\nError occurred while disassembling class " + classDescriptor.replace('/', '.') + " - skipping class");
             ex.printStackTrace();
             // noinspection ResultOfMethodCallIgnored
             smaliFile.delete();
             return false;
-        } finally {
+        }
+        finally
+        {
             if (writer != null) {
                 try {
                     writer.close();

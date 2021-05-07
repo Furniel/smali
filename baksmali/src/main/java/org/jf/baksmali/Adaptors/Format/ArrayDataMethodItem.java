@@ -29,9 +29,8 @@
 package org.jf.baksmali.Adaptors.Format;
 
 import org.jf.baksmali.Adaptors.MethodDefinition;
-import org.jf.baksmali.Renderers.LongRenderer;
+import org.jf.baksmali.formatter.BaksmaliWriter;
 import org.jf.dexlib2.iface.instruction.formats.ArrayPayload;
-import org.jf.util.IndentingWriter;
 
 import java.io.IOException;
 import java.util.List;
@@ -41,11 +40,11 @@ public class ArrayDataMethodItem extends InstructionMethodItem<ArrayPayload> {
         super(methodDef, codeAddress, instruction);
     }
 
-    public boolean writeTo(IndentingWriter writer) throws IOException {
+    public boolean writeTo(BaksmaliWriter writer) throws IOException {
         int elementWidth = instruction.getElementWidth();
 
         writer.write(".array-data ");
-        writer.printSignedIntAsDec(instruction.getElementWidth());
+        writer.writeSignedIntAsDec(instruction.getElementWidth());
         writer.write('\n');
 
         writer.indent(4);
@@ -63,7 +62,7 @@ public class ArrayDataMethodItem extends InstructionMethodItem<ArrayPayload> {
         }
 
         for (Number number: elements) {
-            LongRenderer.writeSignedIntOrLongTo(writer, number.longValue());
+            writer.writeSignedIntOrLongTo(number.longValue());
             writer.write(suffix);
             if (elementWidth == 8) {
                 writeCommentIfLikelyDouble(writer, number.longValue());

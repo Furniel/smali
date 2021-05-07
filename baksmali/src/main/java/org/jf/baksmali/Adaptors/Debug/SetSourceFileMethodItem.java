@@ -31,9 +31,8 @@
 
 package org.jf.baksmali.Adaptors.Debug;
 
+import org.jf.baksmali.formatter.BaksmaliWriter;
 import org.jf.dexlib2.iface.debug.SetSourceFile;
-import org.jf.util.IndentingWriter;
-import org.jf.util.StringUtils;
 
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
@@ -48,13 +47,12 @@ public class SetSourceFileMethodItem extends DebugMethodItem {
     }
 
     @Override
-    public boolean writeTo(IndentingWriter writer) throws IOException {
+    public boolean writeTo(BaksmaliWriter writer) throws IOException {
         writer.write(".source");
 
         if (sourceFile != null) {
-            writer.write(" \"");
-            StringUtils.writeEscapedString(writer, sourceFile);
-            writer.write('"');
+            writer.write(" ");
+            writer.writeQuotedString(sourceFile);
         }
         return true;
     }

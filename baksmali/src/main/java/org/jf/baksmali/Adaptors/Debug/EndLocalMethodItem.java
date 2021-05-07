@@ -32,8 +32,8 @@
 package org.jf.baksmali.Adaptors.Debug;
 
 import org.jf.baksmali.Adaptors.RegisterFormatter;
+import org.jf.baksmali.formatter.BaksmaliWriter;
 import org.jf.dexlib2.iface.debug.EndLocal;
-import org.jf.util.IndentingWriter;
 
 import javax.annotation.Nonnull;
 import java.io.IOException;
@@ -43,14 +43,14 @@ public class EndLocalMethodItem extends DebugMethodItem {
     @Nonnull private final RegisterFormatter registerFormatter;
 
     public EndLocalMethodItem(int codeAddress, int sortOrder, @Nonnull RegisterFormatter registerFormatter,
-                                @Nonnull EndLocal endLocal) {
+                              @Nonnull EndLocal endLocal) {
         super(codeAddress, sortOrder);
         this.endLocal = endLocal;
         this.registerFormatter = registerFormatter;
     }
 
     @Override
-    public boolean writeTo(IndentingWriter writer) throws IOException {
+    public boolean writeTo(BaksmaliWriter writer) throws IOException {
         writer.write(".end local ");
         registerFormatter.writeTo(writer, endLocal.getRegister());
 

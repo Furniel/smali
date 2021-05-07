@@ -35,6 +35,11 @@ import java.io.IOException;
 import java.io.Writer;
 
 public class StringUtils {
+
+    /**
+     * @deprecated Use {@link org.jf.baksmali.formatter.BaksmaliWriter#writeCharEncodedValue}
+     */
+    @Deprecated
     public static void writeEscapedChar(Writer writer, char c) throws IOException {
         if ((c >= ' ') && (c < 0x7f)) {
             if ((c == '\'') || (c == '\"') || (c == '\\')) {
@@ -57,6 +62,10 @@ public class StringUtils {
         writer.write(Character.forDigit(c & 0x0f, 16));
     }
 
+    /**
+     * @deprecated Use {@link org.jf.dexlib2.formatter.DexFormattedWriter#writeQuotedString(CharSequence)}
+     */
+    @Deprecated
     public static void writeEscapedString(Writer writer, String value) throws IOException {
         for (int i = 0; i < value.length(); i++) {
             char c = value.charAt(i);

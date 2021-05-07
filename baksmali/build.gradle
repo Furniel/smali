@@ -39,14 +39,15 @@ buildscript {
 }
 
 dependencies {
-    compile project(':util')
-    compile project(':dexlib2')
-    compile project(':smali')
-    compile depends.guava
-    compile depends.jcommander
+    implementation project(':util')
+    implementation project(':dexlib2')
+    implementation project(':smali')
+    implementation depends.guava
+    implementation depends.jcommander
 
-    testCompile depends.junit
-    testCompile project(':smali')
+    testImplementation depends.junit
+    testImplementation project(':smali')
+    testImplementation depends.antlr_runtime
 }
 
 processResources.inputs.property('version', version)
@@ -55,7 +56,7 @@ processResources.expand('version': version)
 // Build a separate jar that contains all dependencies
 task fatJar(type: Jar) {
     from sourceSets.main.output
-    from { configurations.compile.collect { it.isDirectory() ? it : zipTree(it) } }
+    from { configurations.runtimeClasspath.collect { it.isDirectory() ? it : zipTree(it) } }
 
     classifier = 'fat'
 
@@ -65,30 +66,39 @@ task fatJar(type: Jar) {
 
     doLast {
         if (!System.getProperty('os.name').toLowerCase().contains('windows')) {
-            ant.symlink(link: file("${destinationDir}/baksmali.jar"), resource: archivePath, overwrite: true)
+            ant.symlink(link: file("${destinationDirectory.get()}/baksmali.jar"), resource: archivePath, overwrite: true)
         }
     }
 }
 tasks.getByPath('build').dependsOn(fatJar)
 
-uploadArchives {
-    repositories.mavenDeployer {
-        pom.project {
-            description 'baksmali is a disassembler for dalvik bytecode'
-            scm {
-                url 'https://github.com/JesusFreke/smali/tree/master/baksmali'
+publish {
+    publishing {
+        publications {
+            mavenJava(MavenPublication) {
+                pom {
+                    description = 'baksmali is a disassembler for dalvik bytecode'
+                    scm {
+                        url = 'https://github.com/JesusFreke/smali/tree/master/baksmali'
+                    }
+                }
             }
         }
     }
 }
 
 task proguard(type: proguard.gradle.ProGuardTask, dependsOn: fatJar) {
-    def outFile = fatJar.destinationDir.getPath() + '/' + fatJar.baseName + '-' + fatJar.version + '-small' + '.' + fatJar.extension
+    def outFile = fatJar.destinationDirectory.file(
+            "${fatJar.archiveBaseName.get()}-${fatJar.archiveVersion.get()}-small.${fatJar.archiveExtension.get()}")
 
-    injars fatJar.archivePath
+    injars fatJar
     outjars outFile
 
-    libraryjars "${System.properties['java.home']}/lib/rt.jar"
+    if (JavaVersion.current().isJava9Compatible()) {
+        libraryjars(System.getProperty("java.home") + "/jmods")
+    } else {
+        libraryjars(System.getProperty("java.home") + "/lib/rt.jar")
+    }
 
     dontobfuscate
     dontoptimize

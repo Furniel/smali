@@ -31,26 +31,29 @@
 
 package org.jf.baksmali.Adaptors.Debug;
 
+import org.jf.baksmali.Adaptors.ClassDefinition;
 import org.jf.baksmali.Adaptors.RegisterFormatter;
+import org.jf.baksmali.formatter.BaksmaliWriter;
 import org.jf.dexlib2.iface.debug.RestartLocal;
-import org.jf.util.IndentingWriter;
 
 import javax.annotation.Nonnull;
 import java.io.IOException;
 
 public class RestartLocalMethodItem extends DebugMethodItem {
+    @Nonnull private final ClassDefinition classDef;
     @Nonnull private final RestartLocal restartLocal;
     @Nonnull private final RegisterFormatter registerFormatter;
 
-    public RestartLocalMethodItem(int codeAddress, int sortOrder, @Nonnull RegisterFormatter registerFormatter,
-                              @Nonnull RestartLocal restartLocal) {
+    public RestartLocalMethodItem(@Nonnull ClassDefinition classDef, int codeAddress, int sortOrder,
+                                  @Nonnull RegisterFormatter registerFormatter, @Nonnull RestartLocal restartLocal) {
         super(codeAddress, sortOrder);
+        this.classDef = classDef;
         this.restartLocal = restartLocal;
         this.registerFormatter = registerFormatter;
     }
 
     @Override
-    public boolean writeTo(IndentingWriter writer) throws IOException {
+    public boolean writeTo(BaksmaliWriter writer) throws IOException {
         writer.write(".restart local ");
         registerFormatter.writeTo(writer, restartLocal.getRegister());
 
