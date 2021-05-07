@@ -280,9 +280,9 @@ public class Baksmali {
         //write the disassembly
         try (ByteArrayOutputStream bos = new ByteArrayOutputStream();
              OutputStreamWriter outWriter = new OutputStreamWriter(bos, "UTF8");
-             Writer writer = new IndentingWriter(outWriter))
+             BaksmaliWriter writer = new BaksmaliWriter(outWriter))
         {
-            classDefinition.writeTo((IndentingWriter) writer);
+            classDefinition.writeTo(writer);
             writer.flush();
             byte[] arr = bos.toByteArray();
             try (ByteArrayInputStream bis = new ByteArrayInputStream(arr);
