@@ -74,7 +74,7 @@ idea {
 
 dependencies {
     implementation project(':util')
-    api project(':dexlib2')
+    implementation project(':dexlib2')
     implementation depends.antlr_runtime
     implementation depends.jcommander
     implementation depends.stringtemplate
